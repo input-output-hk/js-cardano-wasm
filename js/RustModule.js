@@ -1,4 +1,4 @@
-import loadModule from '../target/wasm32-unknown-unknown/release/wallet_wasm.wasm';
+import loadModule from '../wallet-wasm/target/wasm32-unknown-unknown/release/wallet_wasm.wasm';
 
 let Module = null;
 

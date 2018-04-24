@@ -1,7 +1,7 @@
 {
-  "name": "rust-cardano-crypto",
+  "name": "cardano-crypto",
   "version": "0.1.2",
-  "description": "Cardano crypto implemented in Rust and transpiled to WebAssembly",
+  "description": "Cardano crypto from rust-wasm binding",
   "main": "./dist/index.js",
   "scripts": {
     "build": "webpack",
@@ -13,7 +13,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/input-output-hk/rust-cardano-crypto.git"
+    "url": "git+https://github.com/input-output-hk/js-cardano-wasm.git"
   },
   "devDependencies": {
     "babel-core": "6.26.0",
@@ -24,7 +24,7 @@
     "mocha": "5.0.2",
     "nodemon": "1.17.1",
     "wasm-loader": "1.3.0",
-    "webpack": "3.11.0"
+    "webpack": "^3.11.0"
   },
   "peerDependencies": {
     "bip39": "2.3.0"

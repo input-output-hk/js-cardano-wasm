@@ -1,8 +1,0 @@
-[workspace]
-members = [
-    "rcw",
-    "wallet-crypto",
-    "wallet-wasm",
-]
-[dependencies]
-printer = { path = "rust-crypto-wasm" }
