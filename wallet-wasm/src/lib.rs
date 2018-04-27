@@ -521,13 +521,23 @@ struct WalletSpendInput {
     change_addr: address::ExtendedAddr
 }
 
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
+struct WalletSpendOutput {
+    cbor_encoded_tx: Vec<u8>,
+    tx: tx::TxAux
+}
+
 #[no_mangle]
 pub extern "C" fn xwallet_spend(input_ptr: *const c_uchar, input_sz: usize, output_ptr: *mut c_uchar) -> i32 {
     let input : WalletSpendInput = input_json!(output_ptr, input_ptr, input_sz);
     let txaux = jrpc_try!(output_ptr, input.wallet.new_transaction(&input.inputs, &input.outputs, &input.fee_addr, &input.change_addr));
+    let cbor = jrpc_try!(output_ptr, cbor::encode_to_cbor(&txaux));
     jrpc_ok!(
         output_ptr,
-        jrpc_try!(output_ptr, cbor::encode_to_cbor(&txaux))
+        WalletSpendOutput {
+            cbor_encoded_tx: cbor,
+            tx: txaux
+        }
     )
 }
 
