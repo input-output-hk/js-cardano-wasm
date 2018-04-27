@@ -102,7 +102,10 @@ export const generateAddresses = (module, wallet, account, type, indices) => {
  * let fee_addr = "DdzFFzCqrhtCUjHyzgvgigwA5soBgDxpc8WfnG1RGhrsRrWMV8uKdpgVfCXGgNuXhdN4qxPMvRUtbUnWhPzxSdxJrWzPqACZeh6scCH5";
  * let change_addr = "DdzFFzCqrhtCUjHyzgvgigwA5soBgDxpc8WfnG1RGhrsRrWMV8uKdpgVfCXGgNuXhdN4qxPMvRUtbUnWhPzxSdxJrWzPqACZeh6scCH5";
  *
- * let signed_tx = CardanoCrypto.Wallet.spend(wallet, inputs, outputs, fee_addr, change_addr).result;
+ * let result = CardanoCrypto.Wallet.spend(wallet, inputs, outputs, fee_addr, change_addr).result;
+ *
+ * console.log("details of the transaction: ", result.tx);
+ * console.log("bytes array (encoded tx): ", result.cbor_encoded_tx);
  * ```
  *
  * @param module - the WASM module that is used for crypto operations
