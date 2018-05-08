@@ -15,7 +15,7 @@ use self::wallet_crypto::hdwallet;
 use self::wallet_crypto::paperwallet;
 use self::wallet_crypto::address;
 use self::wallet_crypto::hdpayload;
-use self::wallet_crypto::tx;
+use self::wallet_crypto::{tx, coin};
 use self::wallet_crypto::config::{Config};
 use self::wallet_crypto::wallet;
 use self::wallet_crypto::wallet::{Wallet};
@@ -298,7 +298,7 @@ pub extern "C" fn wallet_txout_create(ea_ptr: *const c_uchar, ea_sz: usize, amou
     let ea_bytes = unsafe { read_data(ea_ptr, ea_sz) };
 
     let ea = address::ExtendedAddr::from_bytes(&ea_bytes).unwrap();
-    let coin = tx::Coin::new(amount as u64).unwrap();
+    let coin = coin::Coin::new(amount as u64).unwrap();
 
     let txout = tx::TxOut::new(ea, coin);
     let out_buf = encode_to_cbor(&txout).unwrap();
@@ -523,19 +523,21 @@ struct WalletSpendInput {
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
 struct WalletSpendOutput {
     cbor_encoded_tx: Vec<u8>,
-    tx: tx::TxAux
+    tx: tx::TxAux,
+    fee: tx::fee::Fee
 }
 
 #[no_mangle]
 pub extern "C" fn xwallet_spend(input_ptr: *const c_uchar, input_sz: usize, output_ptr: *mut c_uchar) -> i32 {
     let input : WalletSpendInput = input_json!(output_ptr, input_ptr, input_sz);
     let txaux = jrpc_try!(output_ptr, input.wallet.new_transaction(&input.inputs, &input.outputs, &input.change_addr));
-    let cbor = jrpc_try!(output_ptr, cbor::encode_to_cbor(&txaux));
+    let cbor = jrpc_try!(output_ptr, cbor::encode_to_cbor(&txaux.0));
     jrpc_ok!(
         output_ptr,
         WalletSpendOutput {
             cbor_encoded_tx: cbor,
-            tx: txaux
+            tx: txaux.0,
+            fee: txaux.1
         }
     )
 }
