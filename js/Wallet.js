@@ -99,12 +99,12 @@ export const generateAddresses = (module, wallet, account, type, indices) => {
  *     ];
  *
  * // where the fee will need to be sent
- * let fee_addr = "DdzFFzCqrhtCUjHyzgvgigwA5soBgDxpc8WfnG1RGhrsRrWMV8uKdpgVfCXGgNuXhdN4qxPMvRUtbUnWhPzxSdxJrWzPqACZeh6scCH5";
  * let change_addr = "DdzFFzCqrhtCUjHyzgvgigwA5soBgDxpc8WfnG1RGhrsRrWMV8uKdpgVfCXGgNuXhdN4qxPMvRUtbUnWhPzxSdxJrWzPqACZeh6scCH5";
  *
- * let result = CardanoCrypto.Wallet.spend(wallet, inputs, outputs, fee_addr, change_addr).result;
+ * let result = CardanoCrypto.Wallet.spend(wallet, inputs, outputs, change_addr).result;
  *
  * console.log("details of the transaction: ", result.tx);
+ * console.log("fees of the transaction: ", result.fee);
  * console.log("bytes array (encoded tx): ", result.cbor_encoded_tx);
  * ```
  *
@@ -112,15 +112,13 @@ export const generateAddresses = (module, wallet, account, type, indices) => {
  * @param wallet - The wallet object as created by the `fromSeed` function
  * @param inputs - the list of inputs
  * @param outputs - the list of payment to make
- * @param fee_addr - the address to send the fee to
  * @param change_addr - the address to send the change to
- * @returns {*}  - a ready to use, signed transaction encoded in cbor
+ * @returns {*}  - a ready to use, signed transaction encoded in cbor, the fee computed and the JSON encoded version of the TxAux.
  */
-export const spend = (module, wallet, inputs, outputs, fee_addr, change_addr) => {
+export const spend = (module, wallet, inputs, outputs, change_addr) => {
     const input = { wallet: wallet
                   , inputs: inputs
                   , outputs: outputs
-                  , fee_addr: fee_addr
                   , change_addr: change_addr
                   };
     const input_str = JSON.stringify(input);
