@@ -9,7 +9,7 @@ exports.generateMnemonicImpl = function() {
 
 exports.mnemonicToSeedImpl = function (m) {
     try {
-        var e = bip39.mnemonicToEntropy(m);
+        var e = Buffer.from(bip39.mnemonicToEntropy(m), 'hex');
         return window.CardanoCrypto.Blake2b.blake2b_256(e);
     } catch(e) {
         console.error("BIP39 mnemonicToSeed error:", e);
