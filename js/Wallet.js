@@ -30,25 +30,59 @@ export const fromSeed = (module, seed) => {
     return JSON.parse(output_str);
 };
 
+
+/**
+ * Create an account, for public key derivation (using bip44 model).
+ *
+ * @example
+ * ```
+ * const wallet  = CardanoCrypto.Wallet.fromSeed([0,1,2,3,4..]).result;
+ * const account = CardanoCrypto.Wallet.account(wallet, 0).result;
+ * ```
+ *
+ * @param module - the WASM module that is used for crypto operations
+ * @param wallet  - the wallet as created by `Wallet.fromSeed`.
+ * @param account - the account number (0 to (0x80000000 - 1)).
+ * @returns {*}  - a list of ready to use addresses
+ */
+export const newAccount = (module, wallet, account, type, indices) => {
+    const input = { wallet: wallet
+                  , account: account
+                  };
+    const input_str = JSON.stringify(input);
+    const input_array = iconv.encode(input_str, 'utf8');
+
+    const bufinput  = newArray(module, input_array);
+    const bufoutput = newArray0(module, MAX_OUTPUT_SIZE);
+
+    let rsz = module.xwallet_account(bufinput, input_array.length, bufoutput);
+    let output_array = copyArray(module, bufoutput, rsz);
+
+    module.dealloc(bufoutput);
+    module.dealloc(bufinput);
+
+    let output_str = iconv.decode(Buffer.from(output_array), 'utf8');
+    return JSON.parse(output_str);
+};
+
 /**
  * Generate addresses for the given wallet.
  *
  * @example
  * ```
  * const wallet    = CardanoCrypto.Wallet.fromSeed([0,1,2,3,4..]).result;
- * const addresses = CardanoCrypto.Wallet.generateAddresses(0, "External", [0,1,2,3,4]).result;
+ * const account   = CardanoCrypto.Wallet.newAccount(wallet, 0).result;
+ * const addresses = CardanoCrypto.Wallet.generateAddresses(account, "External", [0,1,2,3,4]).result;
  * ```
  *
  * @param module - the WASM module that is used for crypto operations
- * @param wallet - The wallet object as created by the `fromSeed` function
- * @param account - the account number
+ * @param account - the account as create by `CardanoCrypto.Wallet.newAccount`
  * @param type    - the addresses type ("Internal" or "External")
  * @param indices - the addresse indices
  * @returns {*}  - a list of ready to use addresses
  */
-export const generateAddresses = (module, wallet, account, type, indices) => {
-    const input = { wallet: wallet
-                  , account: account
+export const generateAddresses = (module, account, type, indices) => {
+    const input = { account, account
                   , address_type: type
                   , indices: indices
                   };
@@ -139,6 +173,7 @@ export const spend = (module, wallet, inputs, outputs, change_addr) => {
 
 export default {
   fromSeed: apply(fromSeed, RustModule),
+  newAccount: apply(newAccount, RustModule),
   generateAddresses: apply(generateAddresses, RustModule),
   spend: apply(spend, RustModule)
 };
