@@ -18,7 +18,7 @@ use self::wallet_crypto::hdpayload;
 use self::wallet_crypto::{tx, coin};
 use self::wallet_crypto::config::{Config};
 use self::wallet_crypto::wallet;
-use self::wallet_crypto::wallet::{Wallet};
+use self::wallet_crypto::wallet::{Wallet, Account};
 use self::wallet_crypto::bip44;
 
 use self::wallet_crypto::cbor;
@@ -543,9 +543,23 @@ pub extern "C" fn xwallet_spend(input_ptr: *const c_uchar, input_sz: usize, outp
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
-struct GenAddressesInput {
+struct CreateWalletAccount {
     wallet: Wallet,
-    account: u32,
+    account: u32
+}
+
+#[no_mangle]
+pub extern "C" fn xwallet_account(input_ptr: *const c_uchar, input_sz: usize, output_ptr: *mut c_uchar) -> i32 {
+    let input : CreateWalletAccount = input_json!(output_ptr, input_ptr, input_sz);
+    jrpc_ok!(
+        output_ptr,
+        input.wallet.account(input.account)
+    )
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
+struct GenAddressesInput {
+    account: Account,
     address_type: bip44::AddrType,
     indices: Vec<u32>
 }
@@ -553,7 +567,8 @@ struct GenAddressesInput {
 #[no_mangle]
 pub extern "C" fn xwallet_addresses(input_ptr: *const c_uchar, input_sz: usize, output_ptr: *mut c_uchar) -> i32 {
     let input : GenAddressesInput = input_json!(output_ptr, input_ptr, input_sz);
-    let addresses : Vec<address::ExtendedAddr> = input.wallet.gen_addresses(input.account, input.address_type, input.indices);
+    let addresses : Vec<address::ExtendedAddr> =
+        jrpc_try!(output_ptr, input.account.gen_addresses(input.address_type, input.indices));
     jrpc_ok!(
         output_ptr,
         addresses
