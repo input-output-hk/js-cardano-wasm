@@ -15,7 +15,7 @@ use self::wallet_crypto::hdwallet;
 use self::wallet_crypto::paperwallet;
 use self::wallet_crypto::address;
 use self::wallet_crypto::hdpayload;
-use self::wallet_crypto::{tx, coin};
+use self::wallet_crypto::{tx, coin, hash::{HASH_SIZE}};
 use self::wallet_crypto::config::{Config};
 use self::wallet_crypto::wallet;
 use self::wallet_crypto::wallet::{Wallet, Account};
@@ -282,7 +282,7 @@ pub extern "C" fn wallet_payload_decrypt(key_ptr: *const c_uchar, payload_ptr: *
 
 #[no_mangle]
 pub extern "C" fn wallet_txin_create(txid_ptr: *const c_uchar, index: u32, out: *mut c_uchar) -> u32 {
-    let txid_bytes = unsafe { read_data(txid_ptr, tx::HASH_SIZE) };
+    let txid_bytes = unsafe { read_data(txid_ptr, HASH_SIZE) };
 
     let txid = tx::TxId::from_slice(&txid_bytes).unwrap();
 
