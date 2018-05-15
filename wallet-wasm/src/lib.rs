@@ -15,7 +15,7 @@ use self::wallet_crypto::hdwallet;
 use self::wallet_crypto::paperwallet;
 use self::wallet_crypto::address;
 use self::wallet_crypto::hdpayload;
-use self::wallet_crypto::{tx, coin, hash::{HASH_SIZE}};
+use self::wallet_crypto::{util::{hex}, tx, coin, hash::{HASH_SIZE}};
 use self::wallet_crypto::config::{Config};
 use self::wallet_crypto::wallet;
 use self::wallet_crypto::wallet::{Wallet, Account};
@@ -573,4 +573,12 @@ pub extern "C" fn xwallet_addresses(input_ptr: *const c_uchar, input_sz: usize, 
         output_ptr,
         addresses
     )
+}
+
+#[no_mangle]
+pub extern "C" fn xwallet_checkaddress(input_ptr: *const c_uchar, input_sz: usize, output_ptr: *mut c_uchar) -> i32 {
+    let input : String = input_json!(output_ptr, input_ptr, input_sz);
+    let bytes : Vec<u8> = jrpc_try!(output_ptr, hex::decode(&input));
+    let _ : address::ExtendedAddr = jrpc_try!(output_ptr, cbor::decode_from_cbor(&bytes));
+    jrpc_ok!(output_ptr, true)
 }

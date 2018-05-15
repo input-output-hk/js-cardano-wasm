@@ -171,9 +171,35 @@ export const spend = (module, wallet, inputs, outputs, change_addr) => {
     return JSON.parse(output_str);
 };
 
+
+/**
+ * Check if the given hexadecimal string is a valid Cardano Extended Address
+ *
+ * @param module  - the WASM module that is used for crypto operations
+ * @param address - the hexadecimal address to check
+ * @returns {*}  - true or false
+ */
+export const checkAddress = (module, address) => {
+    const input_str = JSON.stringify(address);
+    const input_array = iconv.encode(input_str, 'utf8');
+
+    const bufinput  = newArray(module, input_array);
+    const bufoutput = newArray0(module, MAX_OUTPUT_SIZE);
+
+    let rsz = module.xwallet_checkaddress(bufinput, input_array.length, bufoutput);
+    let output_array = copyArray(module, bufoutput, rsz);
+
+    module.dealloc(bufoutput);
+    module.dealloc(bufinput);
+
+    let output_str = iconv.decode(Buffer.from(output_array), 'utf8');
+    return JSON.parse(output_str);
+};
+
 export default {
   fromSeed: apply(fromSeed, RustModule),
   newAccount: apply(newAccount, RustModule),
   generateAddresses: apply(generateAddresses, RustModule),
-  spend: apply(spend, RustModule)
+  spend: apply(spend, RustModule),
+  checkAddress: apply(checkAddress, RustModule),
 };
