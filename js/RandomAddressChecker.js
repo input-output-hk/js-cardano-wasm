@@ -3,7 +3,7 @@ import RustModule from './RustModule';
 import { newArray, newArray0, copyArray } from './utils/arrays';
 import { apply } from './utils/functions';
 
-const MAX_OUTPUT_SIZE = 4096;
+const MAX_OUTPUT_SIZE = 4096000;
 
 /**
  * Create a random address checker, this will allow validating
