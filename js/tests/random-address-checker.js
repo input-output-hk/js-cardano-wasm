@@ -7,46 +7,28 @@ const XPRV = "301604045de9138b8b23b6730495f7e34b5151d29bA3456BC9B332F6F084A551D6
 const UNKNOWN_ADDRESS = "DdzFFzCqrht8bHGhehfWkQHYQ6oXwXanJF12e2AmqwerXV5WE4NY95VmGTcZH676VQpjjPWczLq68f1CmbdkEKkQ8JDEVDYqmtpyq2s1";
 const KNOWN_ADDRESS   = "3s4ud2BC9ZiQN2tNZiXY15JGmHHLDXjP4fmTSWBL1bHCKqegYqNQxLzz4SdVZSAkkGBhASbcgSK2SFqb9wPFjPsYt92qbJQWiaXiDUK";
 
-function sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-}
-
 describe('Random Address Checker', async function() {
-    await sleep(2);
+    let checker;
 
-    const checker = CardanoCrypto.RandomAddressChecker.newChecker(XPRV).result;
+    before(async () => { 
+        await CardanoCrypto.loadRustModule()
+        checker = CardanoCrypto.RandomAddressChecker.newChecker(XPRV).result;
+    });
 
-    describe("Check " + NUM_UNKNOWN_ADDRESSES + " random addresses are not mine", function() {
+    it("Check " + NUM_UNKNOWN_ADDRESSES + " random addresses are not mine", function() {
         const addresses = Array.apply(null, Array(NUM_UNKNOWN_ADDRESSES)).map(() => { return UNKNOWN_ADDRESS; });
-        let result = { failed: true };
-        it('runs the checkaddresses', function() {
-            result = CardanoCrypto.RandomAddressChecker.checkAddresses(checker, addresses);
-        });
-
-        it('didn\'t fail', function() {
-            expect(result.failed).equals(false);
-        });
-        it('result length is empty', function() {
-            expect(result.result.length).equals(0);
-        });
+        let result = CardanoCrypto.RandomAddressChecker.checkAddresses(checker, addresses);
+        
+        expect(result.failed).equals(false);
+        expect(result.result.length).equals(0);
     });
 
-    describe("Check " + NUM_KNOWN_ADDRESSES + " random addresses are mines", function() {
+    it("Check " + NUM_KNOWN_ADDRESSES + " random addresses are mines", function() {
         const addresses = Array.apply(null, Array(NUM_KNOWN_ADDRESSES)).map(() => { return KNOWN_ADDRESS; });
-        let result = { failed: true };
-        it('runs the checkaddresses', function() {
-            result = CardanoCrypto.RandomAddressChecker.checkAddresses(checker, addresses);
-        });
+        let result = CardanoCrypto.RandomAddressChecker.checkAddresses(checker, addresses);
 
-        console.log(result);
-
-        it('didn\'t fail', function() {
-            expect(result.failed).equals(false);
-        });
-        it('result length is all addresses', function() {
-            expect(result.result.length).equals(NUM_KNOWN_ADDRESSES);
-        });
+        expect(result.failed).equals(false);
+        expect(result.result.length).equals(NUM_KNOWN_ADDRESSES);
     });
-    console.log('check passes');
 });
 
