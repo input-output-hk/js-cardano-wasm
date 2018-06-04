@@ -40,8 +40,12 @@ impl XPrv {
         XPub(self.0.public())
     }
 
-    pub fn derive(&self, index: u32) -> Self {
-        XPrv(self.0.derive(index))
+    pub fn derive_v1(&self, index: u32) -> Self {
+        XPrv(self.0.derive(hdwallet::DerivationScheme::V1, index))
+    }
+
+    pub fn derive_v2(&self, index: u32) -> Self {
+        XPrv(self.0.derive(hdwallet::DerivationScheme::V2, index))
     }
 
     pub fn sign(&self, msg: &[u8]) -> Signature {
@@ -65,8 +69,12 @@ impl XPub {
         XPub(hdwallet::XPub::from_slice(&util::hex::decode(hex).unwrap()).unwrap())
     }
 
-    pub fn derive(&self, index: u32) -> Self {
-        XPub(self.0.derive(index).unwrap())
+    pub fn derive_v1(&self, index: u32) -> Self {
+        XPub(self.0.derive(hdwallet::DerivationScheme::V1 ,index).unwrap())
+    }
+
+    pub fn derive_v2(&self, index: u32) -> Self {
+        XPub(self.0.derive(hdwallet::DerivationScheme::V2 ,index).unwrap())
     }
 
     pub fn verify(&self, signature: &Signature, msg: &[u8]) -> bool {
@@ -197,7 +205,7 @@ impl RandomAddressChecker {
             if let Some(path) = self.key.decrypt_path(dp) {
                 let mut derived = self.root_private_key.clone();
                 for derivation_index in path.as_ref() {
-                    derived = derived.derive(*derivation_index)
+                    derived = derived.derive(hdwallet::DerivationScheme::V1, *derivation_index)
                 }
                 let xpub = derived.public();
                 let sd = address::SpendingData::PubKeyASD(xpub);

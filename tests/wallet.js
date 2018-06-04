@@ -3,9 +3,9 @@ const Cardano = require('../js/wallet.js');
 
 describe('Wallet properties', function() {
     let xprv_0 = Cardano.XPrv.from_seed(Array.apply(null, {length: 32}));
-    let xprv_1 = xprv_0.derive(42);
+    let xprv_1 = xprv_0.derive_v2(42);
     let xpub_0 = xprv_0.public();
-    let xpub_1 = xpub_0.derive(42);
+    let xpub_1 = xpub_0.derive_v2(42);
     let xpub_1_ = xprv_1.public();
     let message = [0,1,2,3,4,5];
 

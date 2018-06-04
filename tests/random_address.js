@@ -7,8 +7,6 @@ describe('Wallet\'s addresses with random indexes', function() {
     let root_xprv = Cardano.XPrv.from_seed(Array.apply(null, {length: 32}));
     let root_xpub = root_xprv.public();
 
-    let xpub = root_xprv.derive(0x80000001).derive(0x80000002).public();
-
     let unknown_address = Cardano.Address.from_base58("DdzFFzCqrhtCUjHyzgvgigwA5soBgDxpc8WfnG1RGhrsRrWMV8uKdpgVfCXGgNuXhdN4qxPMvRUtbUnWhPzxSdxJrWzPqACZeh6scCH5");
 
     let checker = Cardano.RandomAddressChecker.new(root_xprv);
@@ -30,7 +28,7 @@ describe('Wallet\'s addresses with random indexes', function() {
     let root_xprv = Cardano.XPrv.from_seed(Array.apply(null, {length: 32}));
     let root_xpub = root_xprv.public();
 
-    let xpub = root_xprv.derive(0x80000001).derive(0x80000002).public();
+    let xpub = root_xprv.derive_v1(0x80000001).derive_v1(0x80000002).public();
 
     let payload = Cardano.Payload.new(root_xpub, [0x80000001, 0x80000002]);
 
