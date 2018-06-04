@@ -1,16 +1,14 @@
 const path = require('path');
 
 module.exports = {
-  devtool: 'cheap-source-map',
-  entry: {
-    index: './js/index.js',
-  },
+  entry: "./js/index.js",
   output: {
-    filename: './dist/index.js',
-    library: 'CardanoCrypto',
+    path: path.resolve(__dirname, "dist"),
+    filename: "index.js",
+    library: 'Cardano',
     libraryTarget: 'umd',
   },
-  cache: true,
+  mode: "development",
   module: {
     rules: [
       {

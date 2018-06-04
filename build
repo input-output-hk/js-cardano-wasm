@@ -1,7 +1,0 @@
-#!/bin/bash
-set +e
-git submodule update --init --recursive
-pushd wallet-wasm
-cargo  +nightly build --target wasm32-unknown-unknown --release --verbose
-popd
-npm run build

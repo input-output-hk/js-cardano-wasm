@@ -1,40 +1,46 @@
 {
-  "name": "cardano-crypto",
-  "version": "0.1.2",
-  "description": "Cardano crypto from rust-wasm binding",
+  "name": "cardano",
+  "version": "2.0.0",
+  "description": "Cardano wallet and low level cryptographic tools",
   "main": "./dist/index.js",
   "scripts": {
-    "build": "./node_modules/webpack/bin/webpack.js",
-    "test": "mocha js/tests",
-    "build-and-test": "npm run build && npm run test",
-    "test-watch": "nodemon --watch js --exec npm run build-and-test",
-    "dev": "nodemon --watch js --exec npm run build",
-    "prepublishOnly": "./build"
+    "serve": "webpack-dev-server",
+    "test": "mocha tests",
+    "build": "npm run build-wasm && npm run wasm-bindgen && ./node_modules/webpack/bin/webpack.js",
+    "build-test": "npm run build-wasm && npm run wasm-bindgen",
+    "build-and-test": "npm run build-test && npm run test",
+    "test-rust": "cargo test",
+    "build-wasm": "cargo +nightly build --release --target wasm32-unknown-unknown",
+    "wasm-bindgen": "wasm-bindgen --nodejs target/wasm32-unknown-unknown/release/wallet.wasm --out-dir ./js"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/input-output-hk/js-cardano-wasm.git"
   },
+  "keywords": [
+    "cardano",
+    "crypto",
+    "ada",
+    "wallet",
+    "wasm",
+    "rust",
+    "wasm-bindgen"
+  ],
+  "author": "Nicolas Di Prima <nicolas.diprima@iohk.io>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/input-output-hk/js-cardano-wasm/issues"
+  },
+  "homepage": "https://github.com/input-output-hk/js-cardano-wasm#readme",
   "devDependencies": {
+    "webpack": "^4.8.1",
+    "webpack-cli": "^2.0.10",
+    "webpack-dev-server": "^3.1.0",
     "babel-core": "6.26.0",
     "babel-loader": "7.1.4",
     "babel-preset-env": "1.6.1",
-    "bip39": "2.3.0",
-    "chai": "4.1.2",
-    "mocha": "5.0.2",
-    "nodemon": "1.17.1",
     "wasm-loader": "1.3.0",
-    "webpack": "^3.11.0"
-  },
-  "peerDependencies": {
-    "bip39": "2.3.0"
-  },
-  "dependencies": {
-    "iconv-lite": "0.4.19",
-    "safe-buffer": "5.1.1"
-  },
-  "devEngines": {
-    "node": "8.x",
-    "npm": "5.x"
+    "chai": "4.1.2",
+    "mocha": "5.0.2"
   }
 }

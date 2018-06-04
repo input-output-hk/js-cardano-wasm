@@ -1,0 +1,11 @@
+[package]
+name = "wallet"
+version = "0.1.0"
+authors = ["Nicolas Di Prima <nicolas.diprima@iohk.io>"]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wallet-crypto = { path = "./rust/wallet-crypto" }
+wasm-bindgen = "0.2"

@@ -1,15 +1,14 @@
 language: rust
 cache: cargo
-script:
-  - cargo build --verbose --all
-  - cargo test --verbose --all
 matrix:
   include:
     - rust: nightly
       before_script:
         - rustup target add wasm32-unknown-unknown --toolchain nightly
+        - cargo +nightly install wasm-bindgen
         - nvm install 8.2.1
         - npm install
-        - ./build
       script:
+        - npm run test-rust
+        - npm run build-test
         - npm run test

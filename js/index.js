@@ -1,20 +1,21 @@
-import HdWallet from './HdWallet.js';
-import PaperWallet from './PaperWallet.js';
-import RustModule, {loadRustModule} from './RustModule.js';
-import Blake2b from './Blake2b.js';
-import Payload from './Payload.js';
-import Tx from './Tx.js';
-import Config from './Config.js';
-import Wallet from './Wallet.js';
+import loadModule from './wallet';
 
-module.exports = {
-  Payload,
-  HdWallet,
-  PaperWallet,
-  RustModule,
-  loadRustModule,
-  Blake2b,
-  Tx,
-  Wallet,
-  Config,
-};
+let Module = null;
+
+console.log(loadModule);
+
+// Ensure we are only creating a single instance of the web assembly module
+export const loadRustModule = () => Module ?
+  Promise.resolve(Module)
+  :
+  loadModule.then(module => {
+    console.log(module);
+    Module = module;
+    return Module;
+  }
+);
+
+// Expose the WASM module as default export
+let Cardano = {};
+loadRustModule().then((module) => Object.assign(Cardano, module));
+export default Cardano;
