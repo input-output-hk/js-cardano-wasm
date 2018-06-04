@@ -1,11 +1,11 @@
 {
-  "name": "cardano-crypto",
+  "name": "rust-cardano-crypto",
   "version": "0.1.2",
   "description": "Cardano crypto from rust-wasm binding",
   "main": "./dist/index.js",
   "scripts": {
     "build": "./node_modules/webpack/bin/webpack.js",
-    "test": "mocha js/tests",
+    "test": "mocha --timeout=10000 js/tests",
     "build-and-test": "npm run build && npm run test",
     "test-watch": "nodemon --watch js --exec npm run build-and-test",
     "dev": "nodemon --watch js --exec npm run build",
