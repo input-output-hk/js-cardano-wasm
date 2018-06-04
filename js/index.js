@@ -6,15 +6,17 @@ import Payload from './Payload.js';
 import Tx from './Tx.js';
 import Config from './Config.js';
 import Wallet from './Wallet.js';
+import RandomAddressChecker from './RandomAddressChecker';
 
 module.exports = {
   Payload,
-  HdWallet,
   PaperWallet,
   RustModule,
   loadRustModule,
   Blake2b,
   Tx,
+  RandomAddressChecker,
+  HdWallet,
   Wallet,
   Config,
 };
