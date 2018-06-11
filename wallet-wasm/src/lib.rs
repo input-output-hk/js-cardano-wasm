@@ -140,6 +140,13 @@ pub extern "C" fn wallet_from_seed(seed_ptr: *const c_uchar, out: *mut c_uchar) 
 }
 
 #[no_mangle]
+pub extern "C" fn wallet_from_daedalus_seed(seed_ptr: *const c_uchar, out: *mut c_uchar) {
+    let seed = unsafe { read_seed(seed_ptr) };
+    let xprv = hdwallet::XPrv::generate_from_daedalus_seed(&seed);
+    unsafe { write_xprv(&xprv, out) }
+}
+
+#[no_mangle]
 pub extern "C" fn wallet_to_public(xprv_ptr: *const c_uchar, out: *mut c_uchar) {
     let xprv = unsafe { read_xprv(xprv_ptr) };
     let xpub = xprv.public();
@@ -615,16 +622,8 @@ pub extern "C" fn random_address_check(input_ptr: *const c_uchar, input_sz: usiz
     let mut results = Vec::new();
     for addr in addresses {
         if let Some(hdpa) = &addr.attributes.derivation_path.clone() {
-            if let Some(path) = checker.payload_key.decrypt_path(hdpa) {
-                let xprv = path.as_ref().iter().fold(checker.root_key.clone(), |xprv, index| xprv.derive(hdwallet::DerivationScheme::V1, *index));
-                let addr_type = address::AddrType::ATPubKey;
-                let sd = address::SpendingData::PubKeyASD(xprv.public());
-                let attrs = address::Attributes::new_bootstrap_era(Some(hdpa.clone()));
-
-                let address = address::ExtendedAddr::new(addr_type, sd, attrs);
-                if addr == address {
-                    results.push(addr)
-                }
+            if let Some(_) = checker.payload_key.decrypt_path(hdpa) {
+                results.push(addr)
             }
         }
     }

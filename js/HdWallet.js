@@ -12,6 +12,16 @@ export const fromSeed = (module, seed) => {
   return result;
 };
 
+export const fromDaedalusSeed = (module, seed) => {
+  const bufseed = newArray(module, seed);
+  const bufxprv = newArray0(module, 96);
+  module.wallet_from_daedalus_seed(bufseed, bufxprv);
+  let result = copyArray(module, bufxprv, 96);
+  module.dealloc(bufseed);
+  module.dealloc(bufxprv);
+  return result;
+};
+
 export const toPublic = (module, xprv) => {
   const bufxprv = newArray(module, xprv);
   const bufxpub = newArray0(module, 64);
@@ -92,6 +102,7 @@ export const addressGetPayload = (module, address) => {
 
 export default {
   fromSeed: apply(fromSeed, RustModule),
+  fromDaedalusSeed: apply(fromDaedalusSeed, RustModule),
   toPublic: apply(toPublic, RustModule),
   derivePrivate: apply(derivePrivate, RustModule),
   derivePublic: apply(derivePublic, RustModule),
