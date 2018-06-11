@@ -11,15 +11,25 @@ use wallet_crypto::{*};
 extern {
     #[wasm_bindgen(js_namespace = console)]
     fn log(s: &str);
-
-    #[wasm_bindgen(js_namespace = console)]
-    fn error(s: &str);
 }
 
 #[wasm_bindgen]
 pub struct XPrv(hdwallet::XPrv);
 #[wasm_bindgen]
 impl XPrv {
+    pub fn from_daedalus_mnemonics(mnemonics: &str) -> Self {
+        let mnemonics = bip39::Mnemonics::from_string(&bip39::dictionary::ENGLISH, mnemonics).unwrap();
+
+        let entropy = bip39::Entropy::from_mnemonics(&mnemonics).unwrap();
+        let entropy_cbor = cbor::encode_to_cbor(&cbor::Value::Bytes(cbor::Bytes::from_slice(entropy.as_ref()))).unwrap();
+        let hash = hash::Blake2b256::new(&entropy_cbor);
+
+        let seed = hdwallet::Seed::from_bytes(hash.into_bytes());
+        let xprv = hdwallet::XPrv::generate_from_daedalus_seed(&seed);
+
+        XPrv(xprv)
+    }
+
     pub fn from_seed(seed: &[u8]) -> Self {
         XPrv(hdwallet::XPrv::generate_from_seed(&hdwallet::Seed::from_slice(seed).unwrap()))
     }
@@ -121,7 +131,6 @@ impl Payload {
 
     pub fn to_hex(&self) -> String {
         let r = util::hex::encode(self.0.as_ref());
-        log(&format!("Payload::to_hex: {}", r));
         r
     }
 
@@ -178,7 +187,6 @@ impl Addresses {
 #[wasm_bindgen]
 pub struct RandomAddressChecker {
     key:              hdpayload::HDKey,
-    root_private_key: hdwallet::XPrv,
 }
 #[wasm_bindgen]
 impl RandomAddressChecker {
@@ -186,7 +194,7 @@ impl RandomAddressChecker {
         let xprv = prv.0.clone();
         let xpub = xprv.public();
         let key  = hdpayload::HDKey::new(&xpub);
-        RandomAddressChecker { key: key, root_private_key: xprv }
+        RandomAddressChecker { key: key }
     }
 
     pub fn check_addresses(&self, addr: &Addresses) -> Addresses {
@@ -197,24 +205,11 @@ impl RandomAddressChecker {
         self.check_address(&Address::from_base58(base58_addr))
     }
 
-    pub fn check_address(&self, addr: &Address) -> bool {
-        let address = &addr.0;
-        let addr_type = address::AddrType::ATPubKey;
+    pub fn check_address(&self, ref_addr: &Address) -> bool {
+        let address = &ref_addr.0;
 
         if let Some(ref dp) = address.attributes.derivation_path {
-            if let Some(path) = self.key.decrypt_path(dp) {
-                let mut derived = self.root_private_key.clone();
-                for derivation_index in path.as_ref() {
-                    derived = derived.derive(hdwallet::DerivationScheme::V1, *derivation_index)
-                }
-                let xpub = derived.public();
-                let sd = address::SpendingData::PubKeyASD(xpub);
-                let attrs = address::Attributes::new_bootstrap_era(Some(dp.clone()));
-                let addr = address::ExtendedAddr::new(addr_type, sd, attrs);
-                &addr == address
-            } else {
-                false
-            }
+            self.key.decrypt_path(dp).is_some()
         } else {
             false
         }
