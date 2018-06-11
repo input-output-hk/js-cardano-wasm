@@ -4,7 +4,7 @@ const CardanoCrypto = require('../../dist/index.js');
 const NUM_UNKNOWN_ADDRESSES  = 10000;
 const NUM_KNOWN_ADDRESSES    = 10000;
 const UNKNOWN_ADDRESS        = "DdzFFzCqrht8bHGhehfWkQHYQ6oXwXanJF12e2AmqwerXV5WE4NY95VmGTcZH676VQpjjPWczLq68f1CmbdkEKkQ8JDEVDYqmtpyq2s1";
-const KNOWN_ADDRESS          = "DdzFFzCqrhsgMKiTZ4L8xPasnrwwx5xbrg3fsUaRb8XqvZR5izst4AH5eZHupDobicTLCnN5YKh1m91EbSUKc312osrTCFkD6aRZxpqH";
+const KNOWN_ADDRESS          = "DdzFFzCqrhtCa416RbHvfKn3qiP2uE5SyBxs7yQjRzzrScF9V9omRGkeKYiho6FjXJBWZcMHiCxezUTdTy1jKH44irMQBcaezwnfybob";
 
 
 const uint8ArrayToHexadecimal = array =>
@@ -21,7 +21,14 @@ describe('Random Address Checker', async function() {
 
     it("create a private key", function() {
         const seed    = new Uint8Array([0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,]);
-        xprv    = CardanoCrypto.HdWallet.fromSeed(seed);
+        xprv    = CardanoCrypto.HdWallet.fromDaedalusSeed(seed);
+    });
+    it("create an address", function() {
+        const xpub    = CardanoCrypto.HdWallet.toPublic(xprv);
+        const key     = CardanoCrypto.Payload.initialise(xpub);
+
+        const payload = CardanoCrypto.Payload.encrypt_derivation_path(key, [0x80000000, 0x80000001]);
+        const known_address = CardanoCrypto.HdWallet.publicKeyToAddress(xpub, payload);
     });
     it("create a random checker", function() {
         let xprv_hex = Buffer.from(xprv).toString('hex');
