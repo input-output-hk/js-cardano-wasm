@@ -20,6 +20,7 @@ use self::wallet_crypto::config::{Config};
 use self::wallet_crypto::wallet;
 use self::wallet_crypto::wallet::{Wallet, Account};
 use self::wallet_crypto::bip44;
+use self::wallet_crypto::bip39;
 
 use self::wallet_crypto::cbor;
 use self::wallet_crypto::cbor::{encode_to_cbor, decode_from_cbor};
@@ -609,6 +610,38 @@ pub extern "C" fn random_address_checker_new(input_ptr: *const c_uchar, input_sz
         rac
     )
 }
+#[no_mangle]
+pub extern "C" fn random_address_checker_from_mnemonics(input_ptr: *const c_uchar, input_sz: usize, output_ptr: *mut c_uchar) -> i32 {
+    let mnemonics_phrase : String = input_json!(output_ptr, input_ptr, input_sz);
+
+    let mnemonics = bip39::Mnemonics::from_string(&bip39::dictionary::ENGLISH, &mnemonics_phrase)
+        .expect("retrieve the mnemonics from the string");
+    let entropy = bip39::Entropy::from_mnemonics(&mnemonics)
+        .expect("retrieve the entropy from the mnemonics");
+
+    let entropy_bytes = cbor::Value::Bytes(cbor::Bytes::new(Vec::from(entropy.as_ref())));
+    let entropy_cbor = cbor::encode_to_cbor(&entropy_bytes).expect("encode entropy in cbor");
+    let seed = {
+        let mut blake2b = rcw::blake2b::Blake2b::new(32);
+        blake2b.input(&entropy_cbor);
+        let mut out = [0;32];
+        blake2b.result(&mut out);
+        hdwallet::Seed::from_bytes(out)
+    };
+
+    let xprv = hdwallet::XPrv::generate_from_daedalus_seed(&seed);
+
+    let key = hdpayload::HDKey::new(&xprv.public());
+    let rac = RandomAddressChecker {
+        root_key: xprv,
+        payload_key: key
+    };
+    jrpc_ok!(
+        output_ptr,
+        rac
+    )
+}
+
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
 struct RandomAddressCheck {

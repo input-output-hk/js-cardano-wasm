@@ -34,6 +34,33 @@ export const newChecker = (module, xprv) => {
 };
 
 /**
+ * Create a random address checker from daedalus mnemonics
+ *
+ * - can we decrypt the address payload?
+ * - can we reconstruct the address from the decrypted payload?
+ *
+ * @param module - the WASM module that is used for crypto operations
+ * @param mnemonics - the mnemonic phrase
+ * @returns {*}  - a random address checker (JSON object)
+ */
+export const newCheckerFromMnemonics = (module, mnemonics) => {
+    const input_str = JSON.stringify(mnemonics);
+    const input_array = iconv.encode(input_str, 'utf8');
+
+    const bufinput  = newArray(module, input_array);
+    const bufoutput = newArray0(module, MAX_OUTPUT_SIZE);
+
+    let rsz = module.random_address_checker_from_mnemonics(bufinput, input_array.length, bufoutput);
+    let output_array = copyArray(module, bufoutput, rsz);
+
+    module.dealloc(bufoutput);
+    module.dealloc(bufinput);
+
+    let output_str = iconv.decode(Buffer.from(output_array), 'utf8');
+    return JSON.parse(output_str);
+};
+
+/**
  * Check if the given addresses are valid:
  *
  * - can we decrypt the address payload?
@@ -63,6 +90,7 @@ export const checkAddresses = (module, checker, addresses) => {
 
 export default {
   newChecker: apply(newChecker, RustModule),
+  newCheckerFromMnemonics: apply(newCheckerFromMnemonics, RustModule),
   checkAddresses: apply(checkAddresses, RustModule)
 };
 

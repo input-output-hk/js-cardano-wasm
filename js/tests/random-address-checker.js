@@ -6,11 +6,6 @@ const NUM_KNOWN_ADDRESSES    = 10000;
 const UNKNOWN_ADDRESS        = "DdzFFzCqrht8bHGhehfWkQHYQ6oXwXanJF12e2AmqwerXV5WE4NY95VmGTcZH676VQpjjPWczLq68f1CmbdkEKkQ8JDEVDYqmtpyq2s1";
 const KNOWN_ADDRESS          = "DdzFFzCqrhtCa416RbHvfKn3qiP2uE5SyBxs7yQjRzzrScF9V9omRGkeKYiho6FjXJBWZcMHiCxezUTdTy1jKH44irMQBcaezwnfybob";
 
-
-const uint8ArrayToHexadecimal = array =>
-    R.reduce((string, byte) => string + byte.toString(16), '', array)
-
-
 describe('Random Address Checker', async function() {
     let checker = null;
     let xprv = null;
