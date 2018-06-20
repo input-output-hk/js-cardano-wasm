@@ -4,6 +4,8 @@ extern crate serde_derive;
 extern crate serde_json;
 extern crate rcw;
 extern crate wallet_crypto;
+#[macro_use]
+extern crate raw_cbor;
 
 use self::rcw::hmac::{Hmac};
 use self::rcw::sha2::{Sha256};
@@ -21,9 +23,6 @@ use self::wallet_crypto::wallet;
 use self::wallet_crypto::wallet::{Wallet, Account};
 use self::wallet_crypto::bip44;
 use self::wallet_crypto::bip39;
-
-use self::wallet_crypto::cbor;
-use self::wallet_crypto::cbor::{encode_to_cbor, decode_from_cbor};
 
 use std::{mem, result, string, convert};
 use std::ffi::{CStr, CString};
@@ -295,7 +294,7 @@ pub extern "C" fn wallet_txin_create(txid_ptr: *const c_uchar, index: u32, out: 
     let txid = tx::TxId::from_slice(&txid_bytes).unwrap();
 
     let txin = tx::TxIn::new(txid, index);
-    let out_buf = encode_to_cbor(&txin).unwrap();
+    let out_buf = cbor!(&txin).unwrap();
 
     unsafe { write_data(&out_buf, out) }
     out_buf.len() as u32
@@ -309,7 +308,7 @@ pub extern "C" fn wallet_txout_create(ea_ptr: *const c_uchar, ea_sz: usize, amou
     let coin = coin::Coin::new(amount as u64).unwrap();
 
     let txout = tx::TxOut::new(ea, coin);
-    let out_buf = encode_to_cbor(&txout).unwrap();
+    let out_buf = cbor!(&txout).unwrap();
 
     unsafe { write_data(&out_buf, out) }
     out_buf.len() as u32
@@ -318,7 +317,7 @@ pub extern "C" fn wallet_txout_create(ea_ptr: *const c_uchar, ea_sz: usize, amou
 #[no_mangle]
 pub extern "C" fn wallet_tx_new(out: *mut c_uchar) -> u32 {
     let tx = tx::Tx::new();
-    let out_buf = encode_to_cbor(&tx).unwrap();
+    let out_buf = cbor!(&tx).unwrap();
     unsafe { write_data(&out_buf, out) }
     out_buf.len() as u32
 }
@@ -328,12 +327,12 @@ pub extern "C" fn wallet_tx_add_txin(tx_ptr: *const c_uchar, tx_sz: usize, txin_
     let tx_bytes = unsafe { read_data(tx_ptr, tx_sz) };
     let txin_bytes = unsafe { read_data(txin_ptr, txin_sz) };
 
-    let mut tx : tx::Tx = decode_from_cbor(&tx_bytes).unwrap();
-    let txin = decode_from_cbor(&txin_bytes).unwrap();
+    let mut tx : tx::Tx = raw_cbor::de::RawCbor::from(&tx_bytes).deserialize().unwrap();
+    let txin = raw_cbor::de::RawCbor::from(&txin_bytes).deserialize().unwrap();
 
     tx.add_input(txin);
 
-    let out_buf = encode_to_cbor(&tx).unwrap();
+    let out_buf = cbor!(&tx).unwrap();
     unsafe { write_data(&out_buf, out) }
     out_buf.len() as u32
 }
@@ -343,12 +342,12 @@ pub extern "C" fn wallet_tx_add_txout(tx_ptr: *const c_uchar, tx_sz: usize, txou
     let tx_bytes = unsafe { read_data(tx_ptr, tx_sz) };
     let txout_bytes = unsafe { read_data(txout_ptr, txout_sz) };
 
-    let mut tx : tx::Tx = decode_from_cbor(&tx_bytes).unwrap();
-    let txout = decode_from_cbor(&txout_bytes).unwrap();
+    let mut tx : tx::Tx = raw_cbor::de::RawCbor::from(&tx_bytes).deserialize().unwrap();
+    let txout = raw_cbor::de::RawCbor::from(&txout_bytes).deserialize().unwrap();
 
     tx.add_output(txout);
 
-    let out_buf = encode_to_cbor(&tx).unwrap();
+    let out_buf = cbor!(&tx).unwrap();
     unsafe { write_data(&out_buf, out) }
     out_buf.len() as u32
 }
@@ -361,7 +360,7 @@ pub extern "C" fn wallet_tx_sign(cfg_ptr: *const c_uchar, cfg_size: usize, xprv_
     let xprv = unsafe { read_xprv(xprv_ptr) };
     let tx_bytes = unsafe { read_data(tx_ptr, tx_sz) };
 
-    let tx = decode_from_cbor(&tx_bytes).unwrap();
+    let tx : tx::Tx = raw_cbor::de::RawCbor::from(&tx_bytes).deserialize().unwrap();
 
     let txinwitness = tx::TxInWitness::new(&cfg, &xprv, &tx);
 
@@ -381,7 +380,7 @@ pub extern "C" fn wallet_tx_verify(cfg_ptr: *const c_uchar, cfg_size: usize, xpu
     let signature = unsafe { read_signature(sig_ptr) };
 
     let tx_bytes = unsafe { read_data(tx_ptr, tx_sz) };
-    let tx = decode_from_cbor(&tx_bytes).unwrap();
+    let tx : tx::Tx = raw_cbor::de::RawCbor::from(&tx_bytes).deserialize().unwrap();
 
     let txinwitness = tx::TxInWitness::PkWitness(xpub, signature);
 
@@ -475,7 +474,7 @@ macro_rules! jrpc_try {
 enum Error {
     ErrorUtf8(string::FromUtf8Error),
     ErrorJSON(serde_json::error::Error),
-    ErrorCBOR(cbor::Error),
+    ErrorCBOR(raw_cbor::Error),
     ErrorFEE(tx::fee::Error),
     ErrorWallet(wallet::Error),
 }
@@ -485,8 +484,8 @@ impl convert::From<string::FromUtf8Error> for Error {
 impl convert::From<serde_json::error::Error> for Error {
     fn from(j: serde_json::error::Error) -> Self { Error::ErrorJSON(j) }
 }
-impl convert::From<cbor::Error> for Error {
-    fn from(j: cbor::Error) -> Self { Error::ErrorCBOR(j) }
+impl convert::From<raw_cbor::Error> for Error {
+    fn from(j: raw_cbor::Error) -> Self { Error::ErrorCBOR(j) }
 }
 impl convert::From<tx::fee::Error> for Error {
     fn from(j: tx::fee::Error) -> Self { Error::ErrorFEE(j) }
@@ -539,7 +538,7 @@ struct WalletSpendOutput {
 pub extern "C" fn xwallet_spend(input_ptr: *const c_uchar, input_sz: usize, output_ptr: *mut c_uchar) -> i32 {
     let input : WalletSpendInput = input_json!(output_ptr, input_ptr, input_sz);
     let txaux = jrpc_try!(output_ptr, input.wallet.new_transaction(&input.inputs, &input.outputs, &input.change_addr));
-    let cbor = jrpc_try!(output_ptr, cbor::encode_to_cbor(&txaux.0));
+    let cbor = jrpc_try!(output_ptr, cbor!(&txaux.0));
     jrpc_ok!(
         output_ptr,
         WalletSpendOutput {
@@ -587,7 +586,7 @@ pub extern "C" fn xwallet_addresses(input_ptr: *const c_uchar, input_sz: usize, 
 pub extern "C" fn xwallet_checkaddress(input_ptr: *const c_uchar, input_sz: usize, output_ptr: *mut c_uchar) -> i32 {
     let input : String = input_json!(output_ptr, input_ptr, input_sz);
     let bytes : Vec<u8> = jrpc_try!(output_ptr, hex::decode(&input));
-    let _ : address::ExtendedAddr = jrpc_try!(output_ptr, cbor::decode_from_cbor(&bytes));
+    let _ : address::ExtendedAddr = jrpc_try!(output_ptr, raw_cbor::de::RawCbor::from(&bytes).deserialize());
     jrpc_ok!(output_ptr, true)
 }
 
@@ -619,8 +618,8 @@ pub extern "C" fn random_address_checker_from_mnemonics(input_ptr: *const c_ucha
     let entropy = bip39::Entropy::from_mnemonics(&mnemonics)
         .expect("retrieve the entropy from the mnemonics");
 
-    let entropy_bytes = cbor::Value::Bytes(cbor::Bytes::new(Vec::from(entropy.as_ref())));
-    let entropy_cbor = cbor::encode_to_cbor(&entropy_bytes).expect("encode entropy in cbor");
+    let entropy_bytes = raw_cbor::Value::Bytes(Vec::from(entropy.as_ref()));
+    let entropy_cbor = cbor!(&entropy_bytes).expect("encode entropy in cbor");
     let seed = {
         let mut blake2b = rcw::blake2b::Blake2b::new(32);
         blake2b.input(&entropy_cbor);
