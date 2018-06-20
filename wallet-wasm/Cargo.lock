@@ -38,6 +38,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "raw_cbor"
+version = "0.1.0"
+
+[[package]]
 name = "rcw"
 version = "0.2.36"
 
@@ -86,6 +90,7 @@ name = "wallet-crypto"
 version = "0.1.0"
 dependencies = [
  "log 0.4.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "raw_cbor 0.1.0",
  "rcw 0.2.36",
  "serde 1.0.66 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_derive 1.0.66 (registry+https://github.com/rust-lang/crates.io-index)",
