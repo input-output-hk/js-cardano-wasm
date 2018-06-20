@@ -17,7 +17,7 @@ use self::wallet_crypto::hdwallet;
 use self::wallet_crypto::paperwallet;
 use self::wallet_crypto::address;
 use self::wallet_crypto::hdpayload;
-use self::wallet_crypto::{util::{hex}, tx, coin, hash::{HASH_SIZE}};
+use self::wallet_crypto::{util::{hex}, tx, fee, coin, hash::{HASH_SIZE}, txutils};
 use self::wallet_crypto::config::{Config};
 use self::wallet_crypto::wallet;
 use self::wallet_crypto::wallet::{Wallet, Account};
@@ -142,6 +142,7 @@ pub extern "C" fn wallet_from_seed(seed_ptr: *const c_uchar, out: *mut c_uchar) 
 #[no_mangle]
 pub extern "C" fn wallet_from_daedalus_seed(seed_ptr: *const c_uchar, out: *mut c_uchar) {
     let seed = unsafe { read_seed(seed_ptr) };
+    let seed = cbor!(seed.as_ref()).expect("to serialise cbor in memory");
     let xprv = hdwallet::XPrv::generate_from_daedalus_seed(&seed);
     unsafe { write_xprv(&xprv, out) }
 }
@@ -362,7 +363,7 @@ pub extern "C" fn wallet_tx_sign(cfg_ptr: *const c_uchar, cfg_size: usize, xprv_
 
     let tx : tx::Tx = raw_cbor::de::RawCbor::from(&tx_bytes).deserialize().unwrap();
 
-    let txinwitness = tx::TxInWitness::new(&cfg, &xprv, &tx);
+    let txinwitness = tx::TxInWitness::new(&cfg, &xprv, &tx.id());
 
     let signature = match txinwitness {
         tx::TxInWitness::PkWitness(_, sig) => sig,
@@ -475,7 +476,7 @@ enum Error {
     ErrorUtf8(string::FromUtf8Error),
     ErrorJSON(serde_json::error::Error),
     ErrorCBOR(raw_cbor::Error),
-    ErrorFEE(tx::fee::Error),
+    ErrorFEE(fee::Error),
     ErrorWallet(wallet::Error),
 }
 impl convert::From<string::FromUtf8Error> for Error {
@@ -487,8 +488,8 @@ impl convert::From<serde_json::error::Error> for Error {
 impl convert::From<raw_cbor::Error> for Error {
     fn from(j: raw_cbor::Error) -> Self { Error::ErrorCBOR(j) }
 }
-impl convert::From<tx::fee::Error> for Error {
-    fn from(j: tx::fee::Error) -> Self { Error::ErrorFEE(j) }
+impl convert::From<fee::Error> for Error {
+    fn from(j: fee::Error) -> Self { Error::ErrorFEE(j) }
 }
 impl convert::From<wallet::Error> for Error {
     fn from(j: wallet::Error) -> Self { Error::ErrorWallet(j) }
@@ -522,8 +523,8 @@ pub extern "C" fn xwallet_create(input_ptr: *const c_uchar, input_sz: usize, out
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
 struct WalletSpendInput {
     wallet: Wallet,
-    inputs: tx::Inputs,
-    outputs: tx::Outputs,
+    inputs: txutils::Inputs,
+    outputs: Vec<tx::TxOut>,
     change_addr: address::ExtendedAddr
 }
 
@@ -531,13 +532,13 @@ struct WalletSpendInput {
 struct WalletSpendOutput {
     cbor_encoded_tx: Vec<u8>,
     tx: tx::TxAux,
-    fee: tx::fee::Fee
+    fee: fee::Fee
 }
 
 #[no_mangle]
 pub extern "C" fn xwallet_spend(input_ptr: *const c_uchar, input_sz: usize, output_ptr: *mut c_uchar) -> i32 {
     let input : WalletSpendInput = input_json!(output_ptr, input_ptr, input_sz);
-    let txaux = jrpc_try!(output_ptr, input.wallet.new_transaction(&input.inputs, &input.outputs, &input.change_addr));
+    let txaux = jrpc_try!(output_ptr, input.wallet.new_transaction(&input.inputs, &input.outputs, &txutils::OutputPolicy::One(input.change_addr)));
     let cbor = jrpc_try!(output_ptr, cbor!(&txaux.0));
     jrpc_ok!(
         output_ptr,
@@ -625,7 +626,7 @@ pub extern "C" fn random_address_checker_from_mnemonics(input_ptr: *const c_ucha
         blake2b.input(&entropy_cbor);
         let mut out = [0;32];
         blake2b.result(&mut out);
-        hdwallet::Seed::from_bytes(out)
+        raw_cbor::se::Serializer::new().write_bytes(&Vec::from(&out[..])).expect("to serialise cbor in memory").finalize()
     };
 
     let xprv = hdwallet::XPrv::generate_from_daedalus_seed(&seed);

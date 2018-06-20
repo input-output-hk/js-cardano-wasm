@@ -9,6 +9,7 @@ const KNOWN_ADDRESS          = "DdzFFzCqrhtCa416RbHvfKn3qiP2uE5SyBxs7yQjRzzrScF9
 describe('Random Address Checker', async function() {
     let checker = null;
     let xprv = null;
+    let known_address = null;
 
     before(async () => {
         await CardanoCrypto.loadRustModule()
@@ -29,6 +30,7 @@ describe('Random Address Checker', async function() {
         let xprv_hex = Buffer.from(xprv).toString('hex');
         const result = CardanoCrypto.RandomAddressChecker.newChecker(xprv_hex);
         if (result.failed === true) { console.error(result); }
+        expect(xprv_hex).equal("00e598d2c6c4c37ade56a967b4ecf5110f629fc1e5fe313301aa37664b15d34dda5a9bc4e3b6fff44cce8e4ec1d1c43e7ebea5775dd754e66bbd6d63bd81e2c59e2442b8492096dd53eb67d97c1d0cc717ee415291151b0fc297805ea1b81786");
         expect(result.failed).equals(false);
         checker = result.result;
     });
