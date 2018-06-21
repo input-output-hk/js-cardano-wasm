@@ -24,7 +24,7 @@ use self::wallet_crypto::wallet::{Wallet, Account};
 use self::wallet_crypto::bip44;
 use self::wallet_crypto::bip39;
 
-use std::{mem, result, string, convert};
+use std::{mem, result, string, convert, fmt};
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_uint, c_uchar, c_char, c_void};
 use std::iter::repeat;
@@ -520,32 +520,127 @@ pub extern "C" fn xwallet_create(input_ptr: *const c_uchar, input_sz: usize, out
     jrpc_ok!(output_ptr, Wallet::new_from_seed(&seed))
 }
 
+// TODO: write custom Serialize and Deserialize with String serialisation
+#[derive(PartialEq, Eq, Debug)]
+pub struct Coin(coin::Coin);
+impl serde::Serialize for Coin
+{
+    #[inline]
+    fn serialize<S>(&self, serializer: S) -> result::Result<S::Ok, S::Error>
+        where S: serde::Serializer,
+    {
+        serializer.serialize_str(&format!("{}", self.0))
+    }
+}
+struct CoinVisitor();
+impl<'de> serde::de::Visitor<'de> for CoinVisitor {
+    type Value = Coin;
+
+    fn expecting(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        write!(fmt, "Expecting a Blake2b_256 hash (`Hash`)")
+    }
+
+    fn visit_str<'a, E>(self, v: &'a str) -> result::Result<Self::Value, E>
+        where E: serde::de::Error
+    {
+        let i : u64 = match v.parse::<u64>() {
+            Ok(v) => v,
+            Err(err) => return Err(E::custom(format!("{:?}", err))),
+        };
+        match coin::Coin::new(i) {
+            Err(err) => Err(E::custom(format!("{}", err))),
+            Ok(h) => Ok(Coin(h))
+        }
+    }
+}
+impl<'de> serde::Deserialize<'de> for Coin
+{
+    fn deserialize<D>(deserializer: D) -> result::Result<Self, D::Error>
+        where D: serde::Deserializer<'de>
+    {
+        deserializer.deserialize_str(CoinVisitor())
+    }
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Eq, Debug)]
+pub struct TxOut {
+    address: address::ExtendedAddr,
+    value:   Coin
+}
+impl TxOut {
+    fn convert(&self) -> tx::TxOut {
+        tx::TxOut {
+            address: self.address.clone(),
+            value: self.value.0,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Eq, Debug)]
+pub struct TxIn {
+    id:    tx::TxId,
+    index: u32
+}
+impl TxIn {
+    fn convert(&self) -> tx::TxIn {
+        tx::TxIn {
+            id: self.id,
+            index: self.index
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Eq, Debug)]
+pub struct Input {
+    pub ptr:   TxIn,
+    pub value: TxOut,
+    pub addressing: bip44::Addressing,
+}
+impl Input {
+    fn convert(&self) -> txutils::Input {
+        txutils::Input {
+            ptr: self.ptr.convert(),
+            value: self.value.convert(),
+            addressing: self.addressing.clone()
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
 struct WalletSpendInput {
     wallet: Wallet,
-    inputs: txutils::Inputs,
-    outputs: Vec<tx::TxOut>,
+    inputs: Vec<Input>,
+    outputs: Vec<TxOut>,
     change_addr: address::ExtendedAddr
+}
+impl WalletSpendInput {
+    fn get_inputs(&self) -> txutils::Inputs {
+        self.inputs.iter().map(|i| i.convert()).collect()
+    }
+
+    fn get_outputs(&self) -> Vec<tx::TxOut> {
+        self.outputs.iter().map(|o| o.convert()).collect()
+    }
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
 struct WalletSpendOutput {
     cbor_encoded_tx: Vec<u8>,
     tx: tx::TxAux,
-    fee: fee::Fee
+    fee: Coin
 }
 
 #[no_mangle]
 pub extern "C" fn xwallet_spend(input_ptr: *const c_uchar, input_sz: usize, output_ptr: *mut c_uchar) -> i32 {
     let input : WalletSpendInput = input_json!(output_ptr, input_ptr, input_sz);
-    let txaux = jrpc_try!(output_ptr, input.wallet.new_transaction(&input.inputs, &input.outputs, &txutils::OutputPolicy::One(input.change_addr)));
+    let txaux = jrpc_try!(output_ptr, input.wallet.new_transaction(&input.get_inputs(), &input.get_outputs(), &txutils::OutputPolicy::One(input.change_addr)));
     let cbor = jrpc_try!(output_ptr, cbor!(&txaux.0));
     jrpc_ok!(
         output_ptr,
         WalletSpendOutput {
             cbor_encoded_tx: cbor,
             tx: txaux.0,
-            fee: txaux.1
+            fee: Coin(txaux.1.to_coin())
         }
     )
 }
