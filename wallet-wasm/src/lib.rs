@@ -520,12 +520,69 @@ pub extern "C" fn xwallet_create(input_ptr: *const c_uchar, input_sz: usize, out
     jrpc_ok!(output_ptr, Wallet::new_from_seed(&seed))
 }
 
+// TODO: write custom Serialize and Deserialize with String serialisation
+#[derive(Serialize, Deserialize, PartialEq, Eq, Debug)]
+pub struct Coin(u64);
+
+#[derive(Serialize, Deserialize, PartialEq, Eq, Debug)]
+pub struct TxOut {
+    address: address::ExtendedAddr,
+    value:   Coin
+}
+impl TxOut {
+    fn convert(&self) -> tx::TxOut {
+        tx::TxOut {
+            address: self.address.clone(),
+            value: coin::Coin::new(self.value.0).unwrap(),
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Eq, Debug)]
+pub struct TxIn {
+    id:    tx::TxId,
+    index: u32
+}
+impl TxIn {
+    fn convert(&self) -> tx::TxIn {
+        tx::TxIn {
+            id: self.id,
+            index: self.index
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Eq, Debug)]
+pub struct Input {
+    pub ptr:   TxIn,
+    pub value: TxOut,
+    pub addressing: bip44::Addressing,
+}
+impl Input {
+    fn convert(&self) -> txutils::Input {
+        txutils::Input {
+            ptr: self.ptr.convert(),
+            value: self.value.convert(),
+            addressing: self.addressing.clone()
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
 struct WalletSpendInput {
     wallet: Wallet,
-    inputs: txutils::Inputs,
-    outputs: Vec<tx::TxOut>,
+    inputs: Vec<Input>,
+    outputs: Vec<TxOut>,
     change_addr: address::ExtendedAddr
+}
+impl WalletSpendInput {
+    fn get_inputs(&self) -> txutils::Inputs {
+        self.inputs.iter().map(|i| i.convert()).collect()
+    }
+
+    fn get_outputs(&self) -> Vec<tx::TxOut> {
+        self.outputs.iter().map(|o| o.convert()).collect()
+    }
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
@@ -538,7 +595,7 @@ struct WalletSpendOutput {
 #[no_mangle]
 pub extern "C" fn xwallet_spend(input_ptr: *const c_uchar, input_sz: usize, output_ptr: *mut c_uchar) -> i32 {
     let input : WalletSpendInput = input_json!(output_ptr, input_ptr, input_sz);
-    let txaux = jrpc_try!(output_ptr, input.wallet.new_transaction(&input.inputs, &input.outputs, &txutils::OutputPolicy::One(input.change_addr)));
+    let txaux = jrpc_try!(output_ptr, input.wallet.new_transaction(&input.get_inputs(), &input.get_outputs(), &txutils::OutputPolicy::One(input.change_addr)));
     let cbor = jrpc_try!(output_ptr, cbor!(&txaux.0));
     jrpc_ok!(
         output_ptr,
