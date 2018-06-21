@@ -626,7 +626,6 @@ impl WalletSpendInput {
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
 struct WalletSpendOutput {
     cbor_encoded_tx: Vec<u8>,
-    tx: tx::TxAux,
     fee: Coin
 }
 
@@ -639,7 +638,6 @@ pub extern "C" fn xwallet_spend(input_ptr: *const c_uchar, input_sz: usize, outp
         output_ptr,
         WalletSpendOutput {
             cbor_encoded_tx: cbor,
-            tx: txaux.0,
             fee: Coin(txaux.1.to_coin())
         }
     )
