@@ -477,6 +477,7 @@ enum Error {
     ErrorJSON(serde_json::error::Error),
     ErrorCBOR(raw_cbor::Error),
     ErrorFEE(fee::Error),
+    ErrorBip39(bip39::Error),
     ErrorWallet(wallet::Error),
 }
 impl convert::From<string::FromUtf8Error> for Error {
@@ -493,6 +494,9 @@ impl convert::From<fee::Error> for Error {
 }
 impl convert::From<wallet::Error> for Error {
     fn from(j: wallet::Error) -> Self { Error::ErrorWallet(j) }
+}
+impl convert::From<bip39::Error> for Error {
+    fn from(j: bip39::Error) -> Self { Error::ErrorBip39(j) }
 }
 
 type Result<T> = result::Result<T, Error>;
