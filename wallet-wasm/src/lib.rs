@@ -477,6 +477,7 @@ enum Error {
     ErrorJSON(serde_json::error::Error),
     ErrorCBOR(raw_cbor::Error),
     ErrorFEE(fee::Error),
+    ErrorBip39(bip39::Error),
     ErrorWallet(wallet::Error),
 }
 impl convert::From<string::FromUtf8Error> for Error {
@@ -493,6 +494,9 @@ impl convert::From<fee::Error> for Error {
 }
 impl convert::From<wallet::Error> for Error {
     fn from(j: wallet::Error) -> Self { Error::ErrorWallet(j) }
+}
+impl convert::From<bip39::Error> for Error {
+    fn from(j: bip39::Error) -> Self { Error::ErrorBip39(j) }
 }
 
 type Result<T> = result::Result<T, Error>;
@@ -519,6 +523,28 @@ pub extern "C" fn xwallet_create(input_ptr: *const c_uchar, input_sz: usize, out
     let seed = input_json!(output_ptr, input_ptr, input_sz);
     jrpc_ok!(output_ptr, Wallet::new_from_seed(&seed))
 }
+
+#[no_mangle]
+pub extern "C" fn xwallet_create_daedalus_mnemonic(input_ptr: *const c_uchar, input_sz: usize, output_ptr: *mut c_uchar) -> i32 {
+    let mnemonics_phrase : String = input_json!(output_ptr, input_ptr, input_sz);
+
+    let mnemonics = jrpc_try!(output_ptr, bip39::Mnemonics::from_string(&bip39::dictionary::ENGLISH, &mnemonics_phrase));
+    let entropy = jrpc_try!(output_ptr, bip39::Entropy::from_mnemonics(&mnemonics));
+
+    let entropy_bytes = raw_cbor::Value::Bytes(Vec::from(entropy.as_ref()));
+    let entropy_cbor = jrpc_try!(output_ptr, cbor!(&entropy_bytes));
+    let seed = {
+        let mut blake2b = rcw::blake2b::Blake2b::new(32);
+        blake2b.input(&entropy_cbor);
+        let mut out = [0;32];
+        blake2b.result(&mut out);
+        jrpc_try!(output_ptr, raw_cbor::se::Serializer::new().write_bytes(&Vec::from(&out[..]))).finalize()
+    };
+
+    let xprv = hdwallet::XPrv::generate_from_daedalus_seed(&seed);
+    jrpc_ok!(output_ptr, Wallet::new_from_root_xprv(xprv, hdwallet::DerivationScheme::V1))
+}
+
 
 // TODO: write custom Serialize and Deserialize with String serialisation
 #[derive(PartialEq, Eq, Debug)]
@@ -742,14 +768,23 @@ struct RandomAddressCheck {
     addresses: Vec<address::ExtendedAddr>
 }
 
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
+struct FoundRandomAddress {
+    address: address::ExtendedAddr,
+    addressing: [u32;2]
+}
+
 #[no_mangle]
 pub extern "C" fn random_address_check(input_ptr: *const c_uchar, input_sz: usize, output_ptr: *mut c_uchar) -> i32 {
     let RandomAddressCheck { checker, addresses } = input_json!(output_ptr, input_ptr, input_sz);
     let mut results = Vec::new();
     for addr in addresses {
         if let Some(hdpa) = &addr.attributes.derivation_path.clone() {
-            if let Some(_) = checker.payload_key.decrypt_path(hdpa) {
-                results.push(addr)
+            if let Some(path) = checker.payload_key.decrypt_path(hdpa) {
+                results.push(FoundRandomAddress{
+                    address: addr,
+                    addressing: [path.as_ref()[0], path.as_ref()[1]]
+                })
             }
         }
     }
