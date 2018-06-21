@@ -524,6 +524,28 @@ pub extern "C" fn xwallet_create(input_ptr: *const c_uchar, input_sz: usize, out
     jrpc_ok!(output_ptr, Wallet::new_from_seed(&seed))
 }
 
+#[no_mangle]
+pub extern "C" fn xwallet_create_daedalus_mnemonic(input_ptr: *const c_uchar, input_sz: usize, output_ptr: *mut c_uchar) -> i32 {
+    let mnemonics_phrase : String = input_json!(output_ptr, input_ptr, input_sz);
+
+    let mnemonics = jrpc_try!(output_ptr, bip39::Mnemonics::from_string(&bip39::dictionary::ENGLISH, &mnemonics_phrase));
+    let entropy = jrpc_try!(output_ptr, bip39::Entropy::from_mnemonics(&mnemonics));
+
+    let entropy_bytes = raw_cbor::Value::Bytes(Vec::from(entropy.as_ref()));
+    let entropy_cbor = jrpc_try!(output_ptr, cbor!(&entropy_bytes));
+    let seed = {
+        let mut blake2b = rcw::blake2b::Blake2b::new(32);
+        blake2b.input(&entropy_cbor);
+        let mut out = [0;32];
+        blake2b.result(&mut out);
+        jrpc_try!(output_ptr, raw_cbor::se::Serializer::new().write_bytes(&Vec::from(&out[..]))).finalize()
+    };
+
+    let xprv = hdwallet::XPrv::generate_from_daedalus_seed(&seed);
+    jrpc_ok!(output_ptr, Wallet::new_from_root_xprv(xprv, hdwallet::DerivationScheme::V1))
+}
+
+
 // TODO: write custom Serialize and Deserialize with String serialisation
 #[derive(PartialEq, Eq, Debug)]
 pub struct Coin(coin::Coin);
