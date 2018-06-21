@@ -119,7 +119,7 @@ export const generateAddresses = (module, account, type, indices) => {
  *              , id: "1c7b178c1655628ca87c7da6a5d9d13c1e0a304094ac88770768d565e3d20e0b"
  *              }
  *       , value: { address: "DdzFFzCqrhtCUjHyzgvgigwA5soBgDxpc8WfnG1RGhrsRrWMV8uKdpgVfCXGgNuXhdN4qxPMvRUtbUnWhPzxSdxJrWzPqACZeh6scCH5"
- *                , value: 92837348
+ *                , value: "92837348"
  *                }
  *       , addressing: { account: 0, change: 0, index: 9 }
  *       }
@@ -128,7 +128,7 @@ export const generateAddresses = (module, account, type, indices) => {
  * // where we want to send money to
  * let outputs =
  *     [ { address: "DdzFFzCqrhtCUjHyzgvgigwA5soBgDxpc8WfnG1RGhrsRrWMV8uKdpgVfCXGgNuXhdN4qxPMvRUtbUnWhPzxSdxJrWzPqACZeh6scCH5"
- *       , value: 666
+ *       , value: "666"
  *       }
  *     ];
  *
@@ -137,7 +137,6 @@ export const generateAddresses = (module, account, type, indices) => {
  *
  * let result = CardanoCrypto.Wallet.spend(wallet, inputs, outputs, change_addr).result;
  *
- * console.log("details of the transaction: ", result.tx);
  * console.log("fees of the transaction: ", result.fee);
  * console.log("bytes array (encoded tx): ", result.cbor_encoded_tx);
  * ```

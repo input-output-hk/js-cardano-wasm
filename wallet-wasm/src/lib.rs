@@ -24,7 +24,7 @@ use self::wallet_crypto::wallet::{Wallet, Account};
 use self::wallet_crypto::bip44;
 use self::wallet_crypto::bip39;
 
-use std::{mem, result, string, convert};
+use std::{mem, result, string, convert, fmt};
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_uint, c_uchar, c_char, c_void};
 use std::iter::repeat;
@@ -521,8 +521,46 @@ pub extern "C" fn xwallet_create(input_ptr: *const c_uchar, input_sz: usize, out
 }
 
 // TODO: write custom Serialize and Deserialize with String serialisation
-#[derive(Serialize, Deserialize, PartialEq, Eq, Debug)]
-pub struct Coin(u64);
+#[derive(PartialEq, Eq, Debug)]
+pub struct Coin(coin::Coin);
+impl serde::Serialize for Coin
+{
+    #[inline]
+    fn serialize<S>(&self, serializer: S) -> result::Result<S::Ok, S::Error>
+        where S: serde::Serializer,
+    {
+        serializer.serialize_str(&format!("{}", self.0))
+    }
+}
+struct CoinVisitor();
+impl<'de> serde::de::Visitor<'de> for CoinVisitor {
+    type Value = Coin;
+
+    fn expecting(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        write!(fmt, "Expecting a Blake2b_256 hash (`Hash`)")
+    }
+
+    fn visit_str<'a, E>(self, v: &'a str) -> result::Result<Self::Value, E>
+        where E: serde::de::Error
+    {
+        let i : u64 = match v.parse::<u64>() {
+            Ok(v) => v,
+            Err(err) => return Err(E::custom(format!("{:?}", err))),
+        };
+        match coin::Coin::new(i) {
+            Err(err) => Err(E::custom(format!("{}", err))),
+            Ok(h) => Ok(Coin(h))
+        }
+    }
+}
+impl<'de> serde::Deserialize<'de> for Coin
+{
+    fn deserialize<D>(deserializer: D) -> result::Result<Self, D::Error>
+        where D: serde::Deserializer<'de>
+    {
+        deserializer.deserialize_str(CoinVisitor())
+    }
+}
 
 #[derive(Serialize, Deserialize, PartialEq, Eq, Debug)]
 pub struct TxOut {
@@ -533,7 +571,7 @@ impl TxOut {
     fn convert(&self) -> tx::TxOut {
         tx::TxOut {
             address: self.address.clone(),
-            value: coin::Coin::new(self.value.0).unwrap(),
+            value: self.value.0,
         }
     }
 }
@@ -589,7 +627,7 @@ impl WalletSpendInput {
 struct WalletSpendOutput {
     cbor_encoded_tx: Vec<u8>,
     tx: tx::TxAux,
-    fee: fee::Fee
+    fee: Coin
 }
 
 #[no_mangle]
@@ -602,7 +640,7 @@ pub extern "C" fn xwallet_spend(input_ptr: *const c_uchar, input_sz: usize, outp
         WalletSpendOutput {
             cbor_encoded_tx: cbor,
             tx: txaux.0,
-            fee: txaux.1
+            fee: Coin(txaux.1.to_coin())
         }
     )
 }
