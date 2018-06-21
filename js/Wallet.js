@@ -30,6 +30,30 @@ export const fromSeed = (module, seed) => {
     return JSON.parse(output_str);
 };
 
+/**
+ * Create a wallet object from the given seed.
+ *
+ * @param module - the WASM module that is used for crypto operations
+ * @param mnemonics - the 12 words mnemonic phrase (as one string)
+ * @returns {*}  - a wallet object (JSON object)
+ */
+export const fromDaedalusMnemonic = (module, mnemonics) => {
+    const input_str = JSON.stringify(mnemonics);
+    const input_array = iconv.encode(input_str, 'utf8');
+
+    const bufinput  = newArray(module, input_array);
+    const bufoutput = newArray0(module, MAX_OUTPUT_SIZE);
+
+    let rsz = module.xwallet_create_daedalus_mnemonic(bufinput, input_array.length, bufoutput);
+    let output_array = copyArray(module, bufoutput, rsz);
+
+    module.dealloc(bufoutput);
+    module.dealloc(bufinput);
+
+    let output_str = iconv.decode(Buffer.from(output_array), 'utf8');
+    return JSON.parse(output_str);
+};
+
 
 /**
  * Create an account, for public key derivation (using bip44 model).
@@ -197,6 +221,7 @@ export const checkAddress = (module, address) => {
 
 export default {
   fromSeed: apply(fromSeed, RustModule),
+  fromDaedalusMnemonic: apply(fromDaedalusMnemonic, RustModule),
   newAccount: apply(newAccount, RustModule),
   generateAddresses: apply(generateAddresses, RustModule),
   spend: apply(spend, RustModule),
