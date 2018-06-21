@@ -66,10 +66,20 @@ export const newCheckerFromMnemonics = (module, mnemonics) => {
  * - can we decrypt the address payload?
  * - can we reconstruct the address from the decrypted payload?
  *
+ * it returns an array of found addresses:
+ *
+ * @example
+ * ```
+ * [ { address: "DdzFFzCqrhszJvCRLnaFtvbNBYA8Fr1JLDgg3ZhFr7oboxEL6pWQAGkfQo1thE5M4C9FMvpZWc9vhk8hswVu8xoiccbvdot58bNyiH6r"
+ *   , addressing: [ 2147483648, 2147483648 ]
+ *   }
+ * ]
+ * ```
+ *
  * @param module    - the WASM module that is used for crypto operations
  * @param checker   - the random address checker
  * @param addresses - an array of addresses (base58 encoded)
- * @returns {*}     - an array of addresses that are associated to the given checker.
+ * @returns {*}     - an array of addresses that are associated to the given checker with the addressing
  */
 export const checkAddresses = (module, checker, addresses) => {
     const input_str = JSON.stringify({checker: checker, addresses: addresses});

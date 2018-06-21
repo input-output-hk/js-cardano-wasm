@@ -768,14 +768,23 @@ struct RandomAddressCheck {
     addresses: Vec<address::ExtendedAddr>
 }
 
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
+struct FoundRandomAddress {
+    address: address::ExtendedAddr,
+    addressing: [u32;2]
+}
+
 #[no_mangle]
 pub extern "C" fn random_address_check(input_ptr: *const c_uchar, input_sz: usize, output_ptr: *mut c_uchar) -> i32 {
     let RandomAddressCheck { checker, addresses } = input_json!(output_ptr, input_ptr, input_sz);
     let mut results = Vec::new();
     for addr in addresses {
         if let Some(hdpa) = &addr.attributes.derivation_path.clone() {
-            if let Some(_) = checker.payload_key.decrypt_path(hdpa) {
-                results.push(addr)
+            if let Some(path) = checker.payload_key.decrypt_path(hdpa) {
+                results.push(FoundRandomAddress{
+                    address: addr,
+                    addressing: [path.as_ref()[0], path.as_ref()[1]]
+                })
             }
         }
     }
