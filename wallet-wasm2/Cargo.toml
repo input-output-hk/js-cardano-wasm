@@ -1,0 +1,17 @@
+[package]
+name = "wallet-wasm2"
+version = "0.1.0"
+authors = [ "Nicolas Di Prima <nicolas.diprima@iohk.io>"
+          , "Vincent Hanquez <vincent.hanquez@iohk.io>"
+          ]
+description = "JS/Wasm binding for Cardano's Wallet rust library."
+repository = "https://github.com/input-output-hk/js-cardano-wasm"
+license = "MIT"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+raw_cbor = { path = "../rust/cbor" }
+wallet-crypto = { path = "../rust/wallet-crypto" }
+wasm-bindgen = "0.2"
