@@ -156,7 +156,7 @@ export const generateAddresses = (module, account, type, indices) => {
  *       }
  *     ];
  *
- * // where the fee will need to be sent
+ * // where the change will need to be sent
  * let change_addr = "DdzFFzCqrhtCUjHyzgvgigwA5soBgDxpc8WfnG1RGhrsRrWMV8uKdpgVfCXGgNuXhdN4qxPMvRUtbUnWhPzxSdxJrWzPqACZeh6scCH5";
  *
  * let result = CardanoCrypto.Wallet.spend(wallet, inputs, outputs, change_addr).result;
@@ -187,6 +187,65 @@ export const spend = (module, wallet, inputs, outputs, change_addr) => {
     const bufoutput = newArray0(module, OUTPUT_SIZE);
 
     let rsz = module.xwallet_spend(bufinput, input_array.length, bufoutput);
+    let output_array = copyArray(module, bufoutput, rsz);
+
+    module.dealloc(bufoutput);
+    module.dealloc(bufinput);
+
+    let output_str = iconv.decode(Buffer.from(output_array), 'utf8');
+    return JSON.parse(output_str);
+};
+
+/**
+ * Move all UTxO to a single address
+ *
+ * @example
+ * ```
+ * let daedalusMnemonics = "hair hint inside this bicycle trip protect they person tired mouse tribe";
+ * let wallet = CardanoCrypto.Wallet.fromDaedalusMnemonic(daedalusMnemonics).result;
+ *
+ * // the inputs are the resolved UTxO
+ * //
+ * // they contained the TxId and the index of where the TxOut is and the content of the
+ * // TxOut.
+ * let inputs =
+ *     [ { txin: { index: 42
+ *               , id: "1c7b178c1655628ca87c7da6a5d9d13c1e0a304094ac88770768d565e3d20e0b"
+ *               }
+ *       , value: "92837348"
+ *       , addressing: [0x80000000, 0x80000000]
+ *       }
+ *     ];
+ *
+ * // where the output is sent will need to be sent
+ * let output = "Ae2tdPwUPEZDLCa35PPESynyrrBefJ9FMDjgju3Rri6WrDigFjniBW5muic";
+ *
+ * let result = CardanoCrypto.Wallet.move(wallet, inputs, output).result;
+ *
+ * console.log("fees of the transaction: ", result.fee);
+ * console.log("bytes array (encoded tx): ", result.cbor_encoded_tx);
+ * ```
+ *
+ * @param module - the WASM module that is used for crypto operations
+ * @param wallet - The wallet object as created by the `fromSeed` function
+ * @param inputs - the list of inputs
+ * @param output - the address to send all the funds
+ * @returns {*}  - a ready to use, signed transaction encoded in cbor, the fee computed and the JSON encoded version of the TxAux.
+ */
+export const move = (module, wallet, inputs, output) => {
+    const input = { wallet: wallet
+                  , inputs: inputs
+                  , output: output
+                  };
+    const input_str = JSON.stringify(input);
+    const input_array = iconv.encode(input_str, 'utf8');
+
+    const OUTPUT_SIZE = (inputs.length + outputs.length + 1) * 4096;
+
+    const bufinput  = newArray(module, input_array);
+    const bufoutput = newArray0(module, OUTPUT_SIZE);
+
+    let rsz = module.xwallet_move(bufinput, input_array.length, bufoutput);
     let output_array = copyArray(module, bufoutput, rsz);
 
     module.dealloc(bufoutput);
@@ -227,5 +286,6 @@ export default {
   newAccount: apply(newAccount, RustModule),
   generateAddresses: apply(generateAddresses, RustModule),
   spend: apply(spend, RustModule),
+  move: apply(move, RustModule),
   checkAddress: apply(checkAddress, RustModule),
 };

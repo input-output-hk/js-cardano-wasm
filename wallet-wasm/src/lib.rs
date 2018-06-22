@@ -669,6 +669,49 @@ pub extern "C" fn xwallet_spend(input_ptr: *const c_uchar, input_sz: usize, outp
     )
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TxInInfo {
+    pub ptr: TxIn,
+    pub value: Coin,
+    pub addressing: [u32;2]
+}
+impl TxInInfo {
+    fn convert(&self) -> txutils::TxInInfo {
+        txutils::TxInInfo {
+            txin: self.ptr.convert(),
+            value: self.value.0,
+            address_identified: Some(txutils::TxInInfoAddr::Level2(self.addressing.clone()))
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct WalletMoveInput {
+    wallet: Wallet,
+    inputs: Vec<TxInInfo>,
+    output: address::ExtendedAddr
+}
+impl WalletMoveInput {
+    fn get_inputs(&self) -> Vec<txutils::TxInInfo> {
+        self.inputs.iter().map(|i| i.convert()).collect()
+    }
+}
+
+// pub fn move_transaction(&self, inputs: &Vec<txutils::TxInInfo>, output_policy: &txutils::OutputPolicy) -> Result<(tx::TxAux, fee::Fee)> {
+#[no_mangle]
+pub extern "C" fn xwallet_move(input_ptr: *const c_uchar, input_sz: usize, output_ptr: *mut c_uchar) -> i32 {
+    let input : WalletMoveInput = input_json!(output_ptr, input_ptr, input_sz);
+    let txaux = jrpc_try!(output_ptr, input.wallet.move_transaction(&input.get_inputs(), &txutils::OutputPolicy::One(input.output.clone())));
+    let cbor = jrpc_try!(output_ptr, cbor!(&txaux.0));
+    jrpc_ok!(
+        output_ptr,
+        WalletSpendOutput {
+            cbor_encoded_tx: cbor,
+            fee: Coin(txaux.1.to_coin())
+        }
+    )
+}
+
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
 struct CreateWalletAccount {
     wallet: Wallet,
