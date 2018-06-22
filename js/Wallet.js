@@ -240,7 +240,7 @@ export const move = (module, wallet, inputs, output) => {
     const input_str = JSON.stringify(input);
     const input_array = iconv.encode(input_str, 'utf8');
 
-    const OUTPUT_SIZE = (inputs.length + outputs.length + 1) * 4096;
+    const OUTPUT_SIZE = (inputs.length + 1) * 4096;
 
     const bufinput  = newArray(module, input_array);
     const bufoutput = newArray0(module, OUTPUT_SIZE);
