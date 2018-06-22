@@ -3,7 +3,7 @@ extern crate serde;
 extern crate serde_derive;
 extern crate serde_json;
 extern crate rcw;
-extern crate wallet_crypto;
+extern crate cardano;
 #[macro_use]
 extern crate raw_cbor;
 
@@ -13,16 +13,16 @@ use self::rcw::pbkdf2::{pbkdf2};
 use self::rcw::blake2b::{Blake2b};
 use self::rcw::digest::{Digest};
 
-use self::wallet_crypto::hdwallet;
-use self::wallet_crypto::paperwallet;
-use self::wallet_crypto::address;
-use self::wallet_crypto::hdpayload;
-use self::wallet_crypto::{util::{hex}, tx, fee, coin, hash::{HASH_SIZE}, txutils};
-use self::wallet_crypto::config::{Config};
-use self::wallet_crypto::wallet;
-use self::wallet_crypto::wallet::{Wallet, Account};
-use self::wallet_crypto::bip44;
-use self::wallet_crypto::bip39;
+use self::cardano::hdwallet;
+use self::cardano::paperwallet;
+use self::cardano::address;
+use self::cardano::hdpayload;
+use self::cardano::{util::{hex}, tx, fee, coin, hash::{HASH_SIZE}, txutils};
+use self::cardano::config::{Config};
+use self::cardano::wallet;
+use self::cardano::wallet::{Wallet, Account};
+use self::cardano::bip44;
+use self::cardano::bip39;
 
 use std::{mem, result, string, convert, fmt};
 use std::ffi::{CStr, CString};
