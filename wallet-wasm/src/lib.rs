@@ -99,7 +99,9 @@ unsafe fn write_data_u32(data: &[u32], data_ptr: *mut c_uint) {
 
 unsafe fn read_xprv(xprv_ptr: *const c_uchar) -> hdwallet::XPrv {
         let xprv_slice = std::slice::from_raw_parts(xprv_ptr, hdwallet::XPRV_SIZE);
-        hdwallet::XPrv::from_slice(xprv_slice).unwrap()
+        let mut xprv_bytes = [0;hdwallet::XPRV_SIZE];
+        xprv_bytes[..].clone_from_slice(xprv_slice);
+        hdwallet::XPrv::from_bytes_verified(xprv_bytes).unwrap()
 }
 
 unsafe fn write_xprv(xprv: &hdwallet::XPrv, xprv_ptr: *mut c_uchar) {
