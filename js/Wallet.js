@@ -163,6 +163,7 @@ export const generateAddresses = (module, account, type, indices) => {
  *
  * console.log("fees of the transaction: ", result.fee);
  * console.log("bytes array (encoded tx): ", result.cbor_encoded_tx);
+ * console.log("change has been used? ", result.change_used);
  * ```
  *
  * @param module - the WASM module that is used for crypto operations
