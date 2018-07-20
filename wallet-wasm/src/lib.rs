@@ -19,7 +19,7 @@ use self::cardano::address;
 use self::cardano::hdpayload;
 use self::cardano::{util::{hex}, tx, fee, coin, hash::{HASH_SIZE}, txutils};
 use self::cardano::config::{Config};
-use self::cardano::wallet::{bip44, rindex, scheme::{Wallet}};
+use self::cardano::wallet::{self, bip44, rindex, scheme::{Wallet}};
 use self::cardano::bip::{bip39};
 
 use std::{mem, result, string, convert, fmt};
@@ -130,6 +130,30 @@ unsafe fn write_signature<T>(signature: &hdwallet::Signature<T>, out_ptr: *mut c
 unsafe fn read_seed(seed_ptr: *const c_uchar) -> hdwallet::Seed {
         let seed_slice = std::slice::from_raw_parts(seed_ptr, hdwallet::SEED_SIZE);
         hdwallet::Seed::from_slice(seed_slice).unwrap()
+}
+
+#[no_mangle]
+pub extern "C" fn wallet_from_enhanced_entropy( entropy_ptr: *const c_uchar
+                                              , entropy_size: usize
+                                              , password_ptr: *const c_uchar
+                                              , password_size: usize
+                                              , out: *mut c_uchar
+                                              )
+    -> usize
+{
+    match entropy_size {
+        16 | 20 | 24 | 28 | 32 => {},
+        _ => return 1
+    }
+    let entropy  = unsafe { read_data(entropy_ptr, entropy_size) };
+    let password = unsafe { read_data(password_ptr, password_size) };
+    // it is okay to unwrap here, we already checked the size
+    let entropy  = bip39::Entropy::from_slice(&entropy).unwrap();
+    let mut bytes = [0;hdwallet::XPRV_SIZE];
+    wallet::keygen::generate_seed(&entropy, &password, &mut bytes);
+    let xprv = hdwallet::XPrv::normalize_bytes(bytes);
+    unsafe { write_xprv(&xprv, out) };
+    0
 }
 
 #[no_mangle]
@@ -546,6 +570,28 @@ pub extern "C" fn xwallet_create(input_ptr: *const c_uchar, input_sz: usize, out
     let config = Config::default();
 
     let xprv = hdwallet::XPrv::generate_from_seed(&seed);
+    let bip44_wallet = bip44::Wallet::from_root_key(xprv, derivation_scheme, config);
+
+    let root_key = &**bip44_wallet;
+
+    let wallet = Bip44Wallet {
+        root_cached_key: root_key.clone(),
+        config: config,
+        selection_policy: selection_policy,
+        derivation_scheme: derivation_scheme
+    };
+
+    jrpc_ok!(output_ptr, wallet)
+}
+
+#[no_mangle]
+pub extern "C" fn xwallet_from_master_key(input_ptr: *const c_uchar, output_ptr: *mut c_uchar) -> i32 {
+    let xprv = unsafe { read_xprv(input_ptr) };
+
+    let derivation_scheme = hdwallet::DerivationScheme::V2;
+    let selection_policy = fee::SelectionPolicy::FirstMatchFirst;
+    let config = Config::default();
+
     let bip44_wallet = bip44::Wallet::from_root_key(xprv, derivation_scheme, config);
 
     let root_key = &**bip44_wallet;

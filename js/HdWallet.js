@@ -1,6 +1,36 @@
+import iconv from 'iconv-lite';
 import RustModule from './RustModule';
 import { newArray, newArray0, copyArray } from './utils/arrays';
 import { apply } from './utils/functions';
+
+/**
+ * generate an eXtended private key from the given entropy and the given password.
+ *
+ * The password is a string, it will be encoded in utf8 before being passed
+ * to the lower function.
+ *
+ * @param module    - the WASM module that is used for crypto operations
+ * @param entropy   - 16, 20, 24, 28 or 32 bytes of entropy (see BIP39 entropy)
+ * @param password  - password string
+ * @returns {*}     - an eXtended private key (or null) if the given entropy is of invalid size.
+ */
+export const fromEnhancedEntropy = (module, entropy, password) => {
+  const passwordArray = iconv.encode(password, 'utf8');
+
+  const bufentropy = newArray(module, entropy);
+  const bufpassword = newArray(module, passwordArray);
+  const bufxprv = newArray0(module, 96);
+  let result = module.wallet_from_enhanced_entropy(bufentropy, entropy.length, bufpassword, passwordArray.length, bufxprv);
+  let xprv = null;
+  if (result === 0) {
+    xprv = copyArray(module, bufxprv, 96);
+  }
+  module.dealloc(bufpassword);
+  module.dealloc(bufentropy);
+  module.dealloc(bufxprv);
+  return xprv;
+};
+
 
 export const fromSeed = (module, seed) => {
   const bufseed = newArray(module, seed);
@@ -102,6 +132,7 @@ export const addressGetPayload = (module, address) => {
 
 export default {
   fromSeed: apply(fromSeed, RustModule),
+  fromEnhancedEntropy: apply(fromEnhancedEntropy, RustModule),
   fromDaedalusSeed: apply(fromDaedalusSeed, RustModule),
   toPublic: apply(toPublic, RustModule),
   derivePrivate: apply(derivePrivate, RustModule),

@@ -103,4 +103,3 @@ export default {
   newCheckerFromMnemonics: apply(newCheckerFromMnemonics, RustModule),
   checkAddresses: apply(checkAddresses, RustModule)
 };
-

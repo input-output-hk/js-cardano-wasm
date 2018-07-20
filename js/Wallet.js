@@ -34,6 +34,28 @@ export const fromSeed = (module, seed) => {
  * Create a wallet object from the given seed.
  *
  * @param module - the WASM module that is used for crypto operations
+ * @param xprv   - the 96 bytes master key created by `HdWallet.fromEnhancedEntropy`
+ * @returns {*}  - a wallet object (JSON object)
+ */
+export const fromMasterKey = (module, xprv) => {
+    const bufinput  = newArray(module, xprv);
+    const bufoutput = newArray0(module, MAX_OUTPUT_SIZE);
+
+    let rsz = module.xwallet_from_master_key(bufinput, bufoutput);
+    let output_array = copyArray(module, bufoutput, rsz);
+
+    module.dealloc(bufoutput);
+    module.dealloc(bufinput);
+
+    let output_str = iconv.decode(Buffer.from(output_array), 'utf8');
+    return JSON.parse(output_str);
+};
+
+
+/**
+ * Create a wallet object from the given seed.
+ *
+ * @param module - the WASM module that is used for crypto operations
  * @param mnemonics - the 12 words mnemonic phrase (as one string)
  * @returns {*}  - a wallet object (JSON object)
  */
@@ -69,7 +91,7 @@ export const fromDaedalusMnemonic = (module, mnemonics) => {
  * @param account - the account number (0 to (0x80000000 - 1)).
  * @returns {*}  - a list of ready to use addresses
  */
-export const newAccount = (module, wallet, account, type, indices) => {
+export const newAccount = (module, wallet, account) => {
     const input = { wallet: wallet
                   , account: account
                   };
@@ -283,6 +305,7 @@ export const checkAddress = (module, address) => {
 
 export default {
   fromSeed: apply(fromSeed, RustModule),
+  fromMasterKey: apply(fromMasterKey, RustModule),
   fromDaedalusMnemonic: apply(fromDaedalusMnemonic, RustModule),
   newAccount: apply(newAccount, RustModule),
   generateAddresses: apply(generateAddresses, RustModule),
