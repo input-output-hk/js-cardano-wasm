@@ -14,6 +14,10 @@ let mkTest = (i) => {
     const { pubkey, payload, address } = TEST_VECTORS[i];
 
     describe('Test ' + i, function() {
+        before(async () => {
+            await CardanoCrypto.loadRustModule()
+        });
+
         it('create an address', function() {
             expect(CardanoCrypto.HdWallet.publicKeyToAddress(pubkey, payload))
                 .deep.equal(address);

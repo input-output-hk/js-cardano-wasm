@@ -15,6 +15,10 @@ let mkTest = (i) => {
     const { pubkey, key, derivation_path, payload } = TEST_VECTORS[i];
 
     describe('Test ' + i, function() {
+        before(async () => {
+            await CardanoCrypto.loadRustModule()
+        });
+
         it('initialise a payload key', function() {
             expect(CardanoCrypto.Payload.initialise(pubkey))
                 .deep.equal(key);

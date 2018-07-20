@@ -24,6 +24,10 @@ const TEST_VECTORS = [
 ];
 
 describe('PaperWallet', function() {
+  before(async () => {
+      await CardanoCrypto.loadRustModule()
+  });
+
 
   describe('#scramble', function() {
 

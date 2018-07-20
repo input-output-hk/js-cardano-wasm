@@ -28,6 +28,10 @@ let mkTest = (i) => {
     const cfg = CardanoCrypto.Config.defaultConfig();
 
     describe('Test ' + i, function() {
+        before(async () => {
+            await CardanoCrypto.loadRustModule()
+        });
+
         it('create a TxIn', function() {
             expect(CardanoCrypto.Tx.newTxIn(txid, index))
                 .deep.equal(txin);
