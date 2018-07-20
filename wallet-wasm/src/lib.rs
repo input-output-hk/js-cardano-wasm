@@ -2,16 +2,16 @@ extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 extern crate serde_json;
-extern crate rcw;
+extern crate cryptoxide;
 extern crate cardano;
 #[macro_use]
-extern crate raw_cbor;
+extern crate cbor_event;
 
-use self::rcw::hmac::{Hmac};
-use self::rcw::sha2::{Sha256};
-use self::rcw::pbkdf2::{pbkdf2};
-use self::rcw::blake2b::{Blake2b};
-use self::rcw::digest::{Digest};
+use self::cryptoxide::hmac::{Hmac};
+use self::cryptoxide::sha2::{Sha256};
+use self::cryptoxide::pbkdf2::{pbkdf2};
+use self::cryptoxide::blake2b::{Blake2b};
+use self::cryptoxide::digest::{Digest};
 
 use self::cardano::hdwallet;
 use self::cardano::paperwallet;
@@ -19,10 +19,8 @@ use self::cardano::address;
 use self::cardano::hdpayload;
 use self::cardano::{util::{hex}, tx, fee, coin, hash::{HASH_SIZE}, txutils};
 use self::cardano::config::{Config};
-use self::cardano::wallet;
-use self::cardano::wallet::{Wallet, Account};
-use self::cardano::bip44;
-use self::cardano::bip39;
+use self::cardano::wallet::{bip44, rindex, scheme::{Wallet}};
+use self::cardano::bip::{bip39};
 
 use std::{mem, result, string, convert, fmt};
 use std::ffi::{CStr, CString};
@@ -330,8 +328,8 @@ pub extern "C" fn wallet_tx_add_txin(tx_ptr: *const c_uchar, tx_sz: usize, txin_
     let tx_bytes = unsafe { read_data(tx_ptr, tx_sz) };
     let txin_bytes = unsafe { read_data(txin_ptr, txin_sz) };
 
-    let mut tx : tx::Tx = raw_cbor::de::RawCbor::from(&tx_bytes).deserialize().unwrap();
-    let txin = raw_cbor::de::RawCbor::from(&txin_bytes).deserialize().unwrap();
+    let mut tx : tx::Tx = cbor_event::de::RawCbor::from(&tx_bytes).deserialize().unwrap();
+    let txin = cbor_event::de::RawCbor::from(&txin_bytes).deserialize().unwrap();
 
     tx.add_input(txin);
 
@@ -345,8 +343,8 @@ pub extern "C" fn wallet_tx_add_txout(tx_ptr: *const c_uchar, tx_sz: usize, txou
     let tx_bytes = unsafe { read_data(tx_ptr, tx_sz) };
     let txout_bytes = unsafe { read_data(txout_ptr, txout_sz) };
 
-    let mut tx : tx::Tx = raw_cbor::de::RawCbor::from(&tx_bytes).deserialize().unwrap();
-    let txout = raw_cbor::de::RawCbor::from(&txout_bytes).deserialize().unwrap();
+    let mut tx : tx::Tx = cbor_event::de::RawCbor::from(&tx_bytes).deserialize().unwrap();
+    let txout = cbor_event::de::RawCbor::from(&txout_bytes).deserialize().unwrap();
 
     tx.add_output(txout);
 
@@ -363,7 +361,7 @@ pub extern "C" fn wallet_tx_sign(cfg_ptr: *const c_uchar, cfg_size: usize, xprv_
     let xprv = unsafe { read_xprv(xprv_ptr) };
     let tx_bytes = unsafe { read_data(tx_ptr, tx_sz) };
 
-    let tx : tx::Tx = raw_cbor::de::RawCbor::from(&tx_bytes).deserialize().unwrap();
+    let tx : tx::Tx = cbor_event::de::RawCbor::from(&tx_bytes).deserialize().unwrap();
 
     let txinwitness = tx::TxInWitness::new(&cfg, &xprv, &tx.id());
 
@@ -383,7 +381,7 @@ pub extern "C" fn wallet_tx_verify(cfg_ptr: *const c_uchar, cfg_size: usize, xpu
     let signature = unsafe { read_signature(sig_ptr) };
 
     let tx_bytes = unsafe { read_data(tx_ptr, tx_sz) };
-    let tx : tx::Tx = raw_cbor::de::RawCbor::from(&tx_bytes).deserialize().unwrap();
+    let tx : tx::Tx = cbor_event::de::RawCbor::from(&tx_bytes).deserialize().unwrap();
 
     let txinwitness = tx::TxInWitness::PkWitness(xpub, signature);
 
@@ -477,10 +475,10 @@ macro_rules! jrpc_try {
 enum Error {
     ErrorUtf8(string::FromUtf8Error),
     ErrorJSON(serde_json::error::Error),
-    ErrorCBOR(raw_cbor::Error),
+    ErrorCBOR(cbor_event::Error),
     ErrorFEE(fee::Error),
     ErrorBip39(bip39::Error),
-    ErrorWallet(wallet::Error),
+    ErrorRindex(rindex::Error),
 }
 impl convert::From<string::FromUtf8Error> for Error {
     fn from(j: string::FromUtf8Error) -> Self { Error::ErrorUtf8(j) }
@@ -488,17 +486,17 @@ impl convert::From<string::FromUtf8Error> for Error {
 impl convert::From<serde_json::error::Error> for Error {
     fn from(j: serde_json::error::Error) -> Self { Error::ErrorJSON(j) }
 }
-impl convert::From<raw_cbor::Error> for Error {
-    fn from(j: raw_cbor::Error) -> Self { Error::ErrorCBOR(j) }
+impl convert::From<cbor_event::Error> for Error {
+    fn from(j: cbor_event::Error) -> Self { Error::ErrorCBOR(j) }
 }
 impl convert::From<fee::Error> for Error {
     fn from(j: fee::Error) -> Self { Error::ErrorFEE(j) }
 }
-impl convert::From<wallet::Error> for Error {
-    fn from(j: wallet::Error) -> Self { Error::ErrorWallet(j) }
-}
 impl convert::From<bip39::Error> for Error {
     fn from(j: bip39::Error) -> Self { Error::ErrorBip39(j) }
+}
+impl convert::From<rindex::Error> for Error {
+    fn from(j: rindex::Error) -> Self { Error::ErrorRindex(j) }
 }
 
 type Result<T> = result::Result<T, Error>;
@@ -520,31 +518,90 @@ macro_rules! input_json {
     });
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Bip44Wallet {
+    root_cached_key: hdwallet::XPrv,
+
+    config: Config,
+    selection_policy: fee::SelectionPolicy,
+    derivation_scheme: hdwallet::DerivationScheme,
+}
+impl Bip44Wallet {
+    fn to_wallet(&self) -> bip44::Wallet {
+        let root_key = bip44::RootLevel::from(self.root_cached_key.clone());
+        bip44::Wallet::from_cached_key(
+            root_key,
+            self.derivation_scheme,
+            self.config
+        )
+    }
+}
+
 #[no_mangle]
 pub extern "C" fn xwallet_create(input_ptr: *const c_uchar, input_sz: usize, output_ptr: *mut c_uchar) -> i32 {
     let seed = input_json!(output_ptr, input_ptr, input_sz);
-    jrpc_ok!(output_ptr, Wallet::new_from_seed(&seed))
+
+    let derivation_scheme = hdwallet::DerivationScheme::V2;
+    let selection_policy = fee::SelectionPolicy::FirstMatchFirst;
+    let config = Config::default();
+
+    let xprv = hdwallet::XPrv::generate_from_seed(&seed);
+    let bip44_wallet = bip44::Wallet::from_root_key(xprv, derivation_scheme, config);
+
+    let root_key = &**bip44_wallet;
+
+    let wallet = Bip44Wallet {
+        root_cached_key: root_key.clone(),
+        config: config,
+        selection_policy: selection_policy,
+        derivation_scheme: derivation_scheme
+    };
+
+    jrpc_ok!(output_ptr, wallet)
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct DaedalusWallet {
+    root_cached_key: hdwallet::XPrv,
+
+    config: Config,
+    selection_policy: fee::SelectionPolicy,
+    derivation_scheme: hdwallet::DerivationScheme,
+}
+impl DaedalusWallet {
+    pub fn to_wallet(&self) -> rindex::Wallet {
+        let root_key = rindex::RootKey::new(self.root_cached_key.clone(), self.derivation_scheme);
+        rindex::Wallet::from_root_key(
+            self.derivation_scheme,
+            root_key,
+            self.config
+        )
+    }
 }
 
 #[no_mangle]
 pub extern "C" fn xwallet_create_daedalus_mnemonic(input_ptr: *const c_uchar, input_sz: usize, output_ptr: *mut c_uchar) -> i32 {
     let mnemonics_phrase : String = input_json!(output_ptr, input_ptr, input_sz);
 
-    let mnemonics = jrpc_try!(output_ptr, bip39::Mnemonics::from_string(&bip39::dictionary::ENGLISH, &mnemonics_phrase));
-    let entropy = jrpc_try!(output_ptr, bip39::Entropy::from_mnemonics(&mnemonics));
+    let derivation_scheme = hdwallet::DerivationScheme::V1;
+    let selection_policy = fee::SelectionPolicy::FirstMatchFirst;
+    let config = Config::default();
 
-    let entropy_bytes = raw_cbor::Value::Bytes(Vec::from(entropy.as_ref()));
-    let entropy_cbor = jrpc_try!(output_ptr, cbor!(&entropy_bytes));
-    let seed = {
-        let mut blake2b = rcw::blake2b::Blake2b::new(32);
-        blake2b.input(&entropy_cbor);
-        let mut out = [0;32];
-        blake2b.result(&mut out);
-        jrpc_try!(output_ptr, raw_cbor::se::Serializer::new().write_bytes(&Vec::from(&out[..]))).finalize()
+    let daedalus_wallet = jrpc_try!(output_ptr, rindex::Wallet::from_daedalus_mnemonics(
+        derivation_scheme,
+        &bip39::dictionary::ENGLISH,
+        mnemonics_phrase,
+        config
+    ));
+
+    let wallet = DaedalusWallet {
+        root_cached_key: (**daedalus_wallet).clone(),
+        config: config,
+        selection_policy: selection_policy,
+        derivation_scheme: derivation_scheme
     };
 
-    let xprv = hdwallet::XPrv::generate_from_daedalus_seed(&seed);
-    jrpc_ok!(output_ptr, Wallet::new_from_root_xprv(xprv, hdwallet::DerivationScheme::V1))
+    jrpc_ok!(output_ptr, wallet)
 }
 
 
@@ -625,7 +682,7 @@ pub struct Input {
     pub addressing: bip44::Addressing,
 }
 impl Input {
-    fn convert(&self) -> txutils::Input {
+    fn convert(&self) -> txutils::Input<<bip44::Wallet as Wallet>::Addressing> {
         txutils::Input {
             ptr: self.ptr.convert(),
             value: self.value.convert(),
@@ -634,15 +691,15 @@ impl Input {
     }
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 struct WalletSpendInput {
-    wallet: Wallet,
+    wallet: Bip44Wallet,
     inputs: Vec<Input>,
     outputs: Vec<TxOut>,
     change_addr: address::ExtendedAddr
 }
 impl WalletSpendInput {
-    fn get_inputs(&self) -> txutils::Inputs {
+    fn get_inputs(&self) -> Vec<txutils::Input<<bip44::Wallet as Wallet>::Addressing>> {
         self.inputs.iter().map(|i| i.convert()).collect()
     }
 
@@ -662,7 +719,15 @@ struct WalletSpendOutput {
 pub extern "C" fn xwallet_spend(input_ptr: *const c_uchar, input_sz: usize, output_ptr: *mut c_uchar) -> i32 {
     let input : WalletSpendInput = input_json!(output_ptr, input_ptr, input_sz);
     let change = input.change_addr.clone();
-    let (txaux, fee) = jrpc_try!(output_ptr, input.wallet.new_transaction(&input.get_inputs(), &input.get_outputs(), &txutils::OutputPolicy::One(input.change_addr)));
+    let wallet = input.wallet.to_wallet();
+    let (txaux, fee) = jrpc_try!(
+        output_ptr,
+        wallet.new_transaction(
+            input.wallet.selection_policy,
+            input.get_inputs().iter(),
+            input.get_outputs(),
+            &txutils::OutputPolicy::One(input.change_addr))
+    );
     let changed_used = txaux.tx.outputs.iter().any(|out| out.address == change);
     let cbor = jrpc_try!(output_ptr, cbor!(&txaux));
     jrpc_ok!(
@@ -682,23 +747,23 @@ pub struct TxInInfo {
     pub addressing: [u32;2]
 }
 impl TxInInfo {
-    fn convert(&self) -> txutils::TxInInfo {
+    fn convert(&self) -> txutils::TxInInfo<<rindex::Wallet as Wallet>::Addressing> {
         txutils::TxInInfo {
             txin: self.ptr.convert(),
             value: self.value.0,
-            address_identified: Some(txutils::TxInInfoAddr::Level2(self.addressing.clone()))
+            address_identified: (self.addressing[0], self.addressing[1])
         }
     }
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 struct WalletMoveInput {
-    wallet: Wallet,
+    wallet: DaedalusWallet,
     inputs: Vec<TxInInfo>,
     output: address::ExtendedAddr
 }
 impl WalletMoveInput {
-    fn get_inputs(&self) -> Vec<txutils::TxInInfo> {
+    fn get_inputs(&self) -> Vec<txutils::TxInInfo<<rindex::Wallet as Wallet>::Addressing>> {
         self.inputs.iter().map(|i| i.convert()).collect()
     }
 }
@@ -706,7 +771,14 @@ impl WalletMoveInput {
 #[no_mangle]
 pub extern "C" fn xwallet_move(input_ptr: *const c_uchar, input_sz: usize, output_ptr: *mut c_uchar) -> i32 {
     let input : WalletMoveInput = input_json!(output_ptr, input_ptr, input_sz);
-    let txaux = jrpc_try!(output_ptr, input.wallet.move_transaction(&input.get_inputs(), &txutils::OutputPolicy::One(input.output.clone())));
+    let wallet = input.wallet.to_wallet();
+    let txaux = jrpc_try!(
+        output_ptr,
+        wallet.move_transaction(
+            &input.get_inputs(),
+            &txutils::OutputPolicy::One(input.output.clone())
+        )
+    );
     let cbor = jrpc_try!(output_ptr, cbor!(&txaux.0));
     jrpc_ok!(
         output_ptr,
@@ -718,24 +790,41 @@ pub extern "C" fn xwallet_move(input_ptr: *const c_uchar, input_sz: usize, outpu
     )
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 struct CreateWalletAccount {
-    wallet: Wallet,
+    wallet: Bip44Wallet,
     account: u32
+}
+#[derive(Serialize, Deserialize, Debug)]
+struct Bip44Account {
+    root_cached_key: hdwallet::XPub,
+    derivation_scheme: hdwallet::DerivationScheme
+}
+impl Bip44Account {
+    fn to_account(&self) -> bip44::Account<hdwallet::XPub> {
+        let key = bip44::AccountLevel::from(self.root_cached_key.clone());
+        bip44::Account::new(key, self.derivation_scheme)
+    }
 }
 
 #[no_mangle]
 pub extern "C" fn xwallet_account(input_ptr: *const c_uchar, input_sz: usize, output_ptr: *mut c_uchar) -> i32 {
     let input : CreateWalletAccount = input_json!(output_ptr, input_ptr, input_sz);
+    let xprv = input.wallet.to_wallet().account(input.wallet.derivation_scheme, input.account);
+    let xpub = (*xprv).public();
+
     jrpc_ok!(
         output_ptr,
-        input.wallet.account(input.account)
+        Bip44Account {
+            root_cached_key: xpub,
+            derivation_scheme: input.wallet.derivation_scheme
+        }
     )
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 struct GenAddressesInput {
-    account: Account,
+    account: Bip44Account,
     address_type: bip44::AddrType,
     indices: Vec<u32>
 }
@@ -743,8 +832,17 @@ struct GenAddressesInput {
 #[no_mangle]
 pub extern "C" fn xwallet_addresses(input_ptr: *const c_uchar, input_sz: usize, output_ptr: *mut c_uchar) -> i32 {
     let input : GenAddressesInput = input_json!(output_ptr, input_ptr, input_sz);
-    let addresses : Vec<address::ExtendedAddr> =
-        jrpc_try!(output_ptr, input.account.gen_addresses(input.address_type, input.indices));
+    let account = input.account.to_account();
+    let changelevel = jrpc_try!(output_ptr, account.change(input.account.derivation_scheme, input.address_type));
+
+    let mut addresses : Vec<address::ExtendedAddr> = Vec::with_capacity(input.indices.len());
+    for index in input.indices.into_iter() {
+        let xpub = jrpc_try!(output_ptr, changelevel.index(input.account.derivation_scheme, index));
+        let addr = address::ExtendedAddr::new_simple(*xpub);
+        addresses.push(
+            addr
+        );
+    }
     jrpc_ok!(
         output_ptr,
         addresses
@@ -755,7 +853,7 @@ pub extern "C" fn xwallet_addresses(input_ptr: *const c_uchar, input_sz: usize, 
 pub extern "C" fn xwallet_checkaddress(input_ptr: *const c_uchar, input_sz: usize, output_ptr: *mut c_uchar) -> i32 {
     let input : String = input_json!(output_ptr, input_ptr, input_sz);
     let bytes : Vec<u8> = jrpc_try!(output_ptr, hex::decode(&input));
-    let _ : address::ExtendedAddr = jrpc_try!(output_ptr, raw_cbor::de::RawCbor::from(&bytes).deserialize());
+    let _ : address::ExtendedAddr = jrpc_try!(output_ptr, cbor_event::de::RawCbor::from(&bytes).deserialize());
     jrpc_ok!(output_ptr, true)
 }
 
@@ -782,23 +880,14 @@ pub extern "C" fn random_address_checker_new(input_ptr: *const c_uchar, input_sz
 pub extern "C" fn random_address_checker_from_mnemonics(input_ptr: *const c_uchar, input_sz: usize, output_ptr: *mut c_uchar) -> i32 {
     let mnemonics_phrase : String = input_json!(output_ptr, input_ptr, input_sz);
 
-    let mnemonics = bip39::Mnemonics::from_string(&bip39::dictionary::ENGLISH, &mnemonics_phrase)
-        .expect("retrieve the mnemonics from the string");
-    let entropy = bip39::Entropy::from_mnemonics(&mnemonics)
-        .expect("retrieve the entropy from the mnemonics");
+    let wallet = jrpc_try!(output_ptr, rindex::Wallet::from_daedalus_mnemonics(
+        hdwallet::DerivationScheme::V1,
+        &bip39::dictionary::ENGLISH,
+        mnemonics_phrase,
+        Config::default()
+    ));
 
-    let entropy_bytes = raw_cbor::Value::Bytes(Vec::from(entropy.as_ref()));
-    let entropy_cbor = cbor!(&entropy_bytes).expect("encode entropy in cbor");
-    let seed = {
-        let mut blake2b = rcw::blake2b::Blake2b::new(32);
-        blake2b.input(&entropy_cbor);
-        let mut out = [0;32];
-        blake2b.result(&mut out);
-        raw_cbor::se::Serializer::new().write_bytes(&Vec::from(&out[..])).expect("to serialise cbor in memory").finalize()
-    };
-
-    let xprv = hdwallet::XPrv::generate_from_daedalus_seed(&seed);
-
+    let xprv = (**wallet).clone();
     let key = hdpayload::HDKey::new(&xprv.public());
     let rac = RandomAddressChecker {
         root_key: xprv,
