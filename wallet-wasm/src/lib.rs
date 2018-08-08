@@ -1053,6 +1053,11 @@ pub extern "C" fn decrypt_with_password( password_ptr: *const c_uchar
     let password = unsafe { read_data(password_ptr, password_sz) };
     let data = unsafe { read_data(data_ptr, data_sz) };
 
+    if data_sz <= METADATA_SIZE {
+        // not enough input to decrypt.
+        return -2;
+    }
+
     let salt = &data[SALT_START..SALT_END];
     let nonce = &data[NONCE_START..NONCE_END];
     let tag = &data[TAG_START..TAG_END];

@@ -65,6 +65,10 @@ export const decryptWithPassword = (module, password, data) => {
     const NONCE_SIZE = 12;
     const TAG_SIZE   = 16;
 
+    if (data.length <= TAG_SIZE + NONCE_SIZE + SALT_SIZE) {
+        return null;
+    }
+
     const result_size = data.length - TAG_SIZE - NONCE_SIZE - SALT_SIZE;
 
     const bufpassword = newArray(module, password);
@@ -80,6 +84,8 @@ export const decryptWithPassword = (module, password, data) => {
     let output_array = null;
     if (result === -1) {
         output_array = false;
+    } else if (result === -2) {
+        output_array = null; // Not enough inputs
     } else if (result === result_size) {
         output_array = copyArray(module, bufoutput, result);
     }
