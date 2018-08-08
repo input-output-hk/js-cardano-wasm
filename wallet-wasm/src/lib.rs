@@ -303,8 +303,8 @@ pub extern "C" fn wallet_payload_decrypt(key_ptr: *const c_uchar, payload_ptr: *
     let payload = hdpayload::HDAddressPayload::from_bytes(&payload_bytes);
 
     match hdkey.decrypt_path(&payload) {
-        None       => 0xffffffff,
-        Some(path) => {
+        Err(_)   => 0xffffffff,
+        Ok(path) => {
             let v = path.as_ref();
             unsafe { write_data_u32(v, out) };
             v.len() as u32
@@ -964,7 +964,7 @@ pub extern "C" fn random_address_check(input_ptr: *const c_uchar, input_sz: usiz
     let mut results = Vec::new();
     for addr in addresses {
         if let Some(hdpa) = &addr.attributes.derivation_path.clone() {
-            if let Some(path) = checker.payload_key.decrypt_path(hdpa) {
+            if let Ok(path) = checker.payload_key.decrypt_path(hdpa) {
                 results.push(FoundRandomAddress{
                     address: addr,
                     addressing: [path.as_ref()[0], path.as_ref()[1]]
