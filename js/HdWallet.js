@@ -3,6 +3,12 @@ import RustModule from './RustModule';
 import { newArray, newArray0, copyArray } from './utils/arrays';
 import { apply } from './utils/functions';
 
+const SEED_SIZE = 32;
+const XPRV_SIZE = 96;
+const XPUB_SIZE = 64;
+const SIGNATURE_SIZE = 64;
+
+
 /**
  * generate an eXtended private key from the given entropy and the given password.
  *
@@ -19,11 +25,11 @@ export const fromEnhancedEntropy = (module, entropy, password) => {
 
   const bufentropy = newArray(module, entropy);
   const bufpassword = newArray(module, passwordArray);
-  const bufxprv = newArray0(module, 96);
+  const bufxprv = newArray0(module, XPRV_SIZE);
   let result = module.wallet_from_enhanced_entropy(bufentropy, entropy.length, bufpassword, passwordArray.length, bufxprv);
   let xprv = null;
   if (result === 0) {
-    xprv = copyArray(module, bufxprv, 96);
+    xprv = copyArray(module, bufxprv, XPRV_SIZE);
   }
   module.dealloc(bufpassword);
   module.dealloc(bufentropy);
@@ -31,38 +37,57 @@ export const fromEnhancedEntropy = (module, entropy, password) => {
   return xprv;
 };
 
-
+/**
+ * @param module    - the WASM module that is used for crypto operations
+ * @param seed      - the original seed, needs to be {@link SEED_SIZE}
+ * @returns {*}     - returns false if the seed is not of the valid length, or return the root private key of the hdwallet
+ */
 export const fromSeed = (module, seed) => {
+  if (seed.length !== SEED_SIZE) {
+    return false;
+  }
+
   const bufseed = newArray(module, seed);
-  const bufxprv = newArray0(module, 96);
+  const bufxprv = newArray0(module, XPRV_SIZE);
   module.wallet_from_seed(bufseed, bufxprv);
-  let result = copyArray(module, bufxprv, 96);
+  let result = copyArray(module, bufxprv, XPRV_SIZE);
   module.dealloc(bufseed);
   module.dealloc(bufxprv);
   return result;
 };
 
+/**
+ * @param module    - the WASM module that is used for crypto operations
+ * @param seed      - the original seed, needs to be {@link SEED_SIZE}
+ * @returns {*}     - returns false if the seed is not of the valid length, or return the root private key of the hdwallet
+ */
 export const fromDaedalusSeed = (module, seed) => {
+  if (seed.length !== SEED_SIZE) {
+    return false;
+  }
+
   const bufseed = newArray(module, seed);
-  const bufxprv = newArray0(module, 96);
+  const bufxprv = newArray0(module,XPRV_SIZE);
   module.wallet_from_daedalus_seed(bufseed, bufxprv);
-  let result = copyArray(module, bufxprv, 96);
+  let result = copyArray(module, bufxprv, XPRV_SIZE);
   module.dealloc(bufseed);
   module.dealloc(bufxprv);
   return result;
 };
 
 export const toPublic = (module, xprv) => {
+  if (xprv.length !== XPRV_SIZE) { return false; }
   const bufxprv = newArray(module, xprv);
-  const bufxpub = newArray0(module, 64);
+  const bufxpub = newArray0(module, XPUB_SIZE);
   module.wallet_to_public(bufxprv, bufxpub);
-  let result = copyArray(module, bufxpub, 64);
+  let result = copyArray(module, bufxpub, XPUB_SIZE);
   module.dealloc(bufxprv);
   module.dealloc(bufxpub);
   return result;
 };
 
 export const derivePrivate = (module, xprv, index) => {
+  if (xprv.length !== XPRV_SIZE) { return false; }
   const bufxprv = newArray(module, xprv);
   const bufchild = newArray0(module, xprv.length);
   module.wallet_derive_private(bufxprv, index, bufchild);
@@ -73,6 +98,7 @@ export const derivePrivate = (module, xprv, index) => {
 };
 
 export const derivePublic = (module, xpub, index) => {
+  if (xpub.length !== XPUB_SIZE) { return false; }
   if (index >= 0x80000000) {
     throw new Error('cannot do public derivation with hard index');
   }
@@ -86,12 +112,13 @@ export const derivePublic = (module, xpub, index) => {
 };
 
 export const sign = (module, xprv, msg) => {
+  if (xprv.length !== XPRV_SIZE) { return false; }
   let length = msg.length;
-  const bufsig = newArray0(module, 64);
+  const bufsig = newArray0(module, SIGNATURE_SIZE);
   const bufxprv = newArray(module, xprv);
   const bufmsg = newArray(module, msg);
   module.wallet_sign(bufxprv, bufmsg, length, bufsig);
-  let result = copyArray(module, bufsig, 64);
+  let result = copyArray(module, bufsig, SIGNATURE_SIZE);
   module.dealloc(bufxprv);
   module.dealloc(bufmsg);
   module.dealloc(bufsig);
@@ -99,6 +126,7 @@ export const sign = (module, xprv, msg) => {
 };
 
 export const publicKeyToAddress = (module, xpub, payload) => {
+  if (xpub.length !== XPUB_SIZE) { return false; }
   const bufxpub    = newArray(module, xpub);
   const bufpayload = newArray(module, payload);
   const bufaddr    = newArray0(module, 1024);
