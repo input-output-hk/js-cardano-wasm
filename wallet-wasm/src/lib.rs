@@ -387,7 +387,7 @@ pub extern "C" fn wallet_tx_sign(cfg_ptr: *const c_uchar, cfg_size: usize, xprv_
 
     let tx : tx::Tx = cbor_event::de::RawCbor::from(&tx_bytes).deserialize().unwrap();
 
-    let txinwitness = tx::TxInWitness::new(&cfg, &xprv, &tx.id());
+    let txinwitness = tx::TxInWitness::new(cfg.protocol_magic, &xprv, &tx.id());
 
     let signature = match txinwitness {
         tx::TxInWitness::PkWitness(_, sig) => sig,
@@ -409,7 +409,7 @@ pub extern "C" fn wallet_tx_verify(cfg_ptr: *const c_uchar, cfg_size: usize, xpu
 
     let txinwitness = tx::TxInWitness::PkWitness(xpub, signature);
 
-    if txinwitness.verify_tx(&cfg, &tx) { 0 } else { -1 }
+    if txinwitness.verify_tx(cfg.protocol_magic, &tx) { 0 } else { -1 }
 }
 
 mod jrpc {
@@ -555,8 +555,7 @@ impl Bip44Wallet {
         let root_key = bip44::RootLevel::from(self.root_cached_key.clone());
         bip44::Wallet::from_cached_key(
             root_key,
-            self.derivation_scheme,
-            self.config
+            self.derivation_scheme
         )
     }
 }
@@ -570,7 +569,7 @@ pub extern "C" fn xwallet_create(input_ptr: *const c_uchar, input_sz: usize, out
     let config = Config::default();
 
     let xprv = hdwallet::XPrv::generate_from_seed(&seed);
-    let bip44_wallet = bip44::Wallet::from_root_key(xprv, derivation_scheme, config);
+    let bip44_wallet = bip44::Wallet::from_root_key(xprv, derivation_scheme);
 
     let root_key = &**bip44_wallet;
 
@@ -592,7 +591,7 @@ pub extern "C" fn xwallet_from_master_key(input_ptr: *const c_uchar, output_ptr:
     let selection_policy = fee::SelectionPolicy::FirstMatchFirst;
     let config = Config::default();
 
-    let bip44_wallet = bip44::Wallet::from_root_key(xprv, derivation_scheme, config);
+    let bip44_wallet = bip44::Wallet::from_root_key(xprv, derivation_scheme);
 
     let root_key = &**bip44_wallet;
 
@@ -619,8 +618,7 @@ impl DaedalusWallet {
         let root_key = rindex::RootKey::new(self.root_cached_key.clone(), self.derivation_scheme);
         rindex::Wallet::from_root_key(
             self.derivation_scheme,
-            root_key,
-            self.config
+            root_key
         )
     }
 }
@@ -636,8 +634,7 @@ pub extern "C" fn xwallet_create_daedalus_mnemonic(input_ptr: *const c_uchar, in
     let daedalus_wallet = jrpc_try!(output_ptr, rindex::Wallet::from_daedalus_mnemonics(
         derivation_scheme,
         &bip39::dictionary::ENGLISH,
-        mnemonics_phrase,
-        config
+        mnemonics_phrase
     ));
 
     let wallet = DaedalusWallet {
@@ -766,9 +763,11 @@ pub extern "C" fn xwallet_spend(input_ptr: *const c_uchar, input_sz: usize, outp
     let input : WalletSpendInput = input_json!(output_ptr, input_ptr, input_sz);
     let change = input.change_addr.clone();
     let wallet = input.wallet.to_wallet();
+    let config = input.wallet.config;
     let (txaux, fee) = jrpc_try!(
         output_ptr,
         wallet.new_transaction(
+            config.protocol_magic,
             input.wallet.selection_policy,
             input.get_inputs().iter(),
             input.get_outputs(),
@@ -821,6 +820,7 @@ pub extern "C" fn xwallet_move(input_ptr: *const c_uchar, input_sz: usize, outpu
     let txaux = jrpc_try!(
         output_ptr,
         wallet.move_transaction(
+            input.wallet.config.protocol_magic,
             &input.get_inputs(),
             &txutils::OutputPolicy::One(input.output.clone())
         )
@@ -929,8 +929,7 @@ pub extern "C" fn random_address_checker_from_mnemonics(input_ptr: *const c_ucha
     let wallet = jrpc_try!(output_ptr, rindex::Wallet::from_daedalus_mnemonics(
         hdwallet::DerivationScheme::V1,
         &bip39::dictionary::ENGLISH,
-        mnemonics_phrase,
-        Config::default()
+        mnemonics_phrase
     ));
 
     let xprv = (**wallet).clone();
