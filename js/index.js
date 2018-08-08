@@ -7,6 +7,7 @@ import Tx from './Tx.js';
 import Config from './Config.js';
 import Wallet from './Wallet.js';
 import RandomAddressChecker from './RandomAddressChecker';
+import PasswordProtect from './PasswordProtect';
 
 module.exports = {
   Payload,
@@ -19,4 +20,5 @@ module.exports = {
   HdWallet,
   Wallet,
   Config,
+  PasswordProtect,
 };

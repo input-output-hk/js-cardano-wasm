@@ -8,10 +8,11 @@ extern crate cardano;
 extern crate cbor_event;
 
 use self::cryptoxide::hmac::{Hmac};
-use self::cryptoxide::sha2::{Sha256};
+use self::cryptoxide::sha2::{Sha256, Sha512};
 use self::cryptoxide::pbkdf2::{pbkdf2};
 use self::cryptoxide::blake2b::{Blake2b};
 use self::cryptoxide::digest::{Digest};
+use self::cryptoxide::chacha20poly1305::{ChaCha20Poly1305};
 
 use self::cardano::hdwallet;
 use self::cardano::paperwallet;
@@ -975,4 +976,105 @@ pub extern "C" fn random_address_check(input_ptr: *const c_uchar, input_sz: usiz
         output_ptr,
         results
     )
+}
+
+mod password_encryption_parameter {
+    pub const ITER       : u32   = 19_162;
+    pub const SALT_SIZE  : usize = 32;
+    pub const NONCE_SIZE : usize = 12;
+    pub const KEY_SIZE   : usize = 32;
+    pub const TAG_SIZE   : usize = 16;
+
+    pub const METADATA_SIZE : usize = SALT_SIZE + NONCE_SIZE + TAG_SIZE;
+
+    pub const SALT_START      : usize = 0;
+    pub const SALT_END        : usize = SALT_START + SALT_SIZE;
+    pub const NONCE_START     : usize = SALT_END;
+    pub const NONCE_END       : usize = NONCE_START + NONCE_SIZE;
+    pub const TAG_START       : usize = NONCE_END;
+    pub const TAG_END         : usize = TAG_START + TAG_SIZE;
+    pub const ENCRYPTED_START : usize = TAG_END;
+}
+
+#[no_mangle]
+pub extern "C" fn encrypt_with_password( password_ptr: *const c_uchar
+                                       , password_sz: usize
+                                       , salt_ptr: *const c_uchar  // expect 32 bytes
+                                       , nonce_ptr: *const c_uchar // expect 12 bytes
+                                       , data_ptr: *const c_uchar
+                                       , data_sz: usize
+                                       , output_ptr: *mut c_uchar
+                                       )
+    -> i32
+{
+    use password_encryption_parameter::*;
+
+    let password = unsafe { read_data(password_ptr, password_sz) };
+    let salt     = unsafe { read_data(salt_ptr, SALT_SIZE) };
+    let nonce    = unsafe { read_data(nonce_ptr, NONCE_SIZE) };
+    let data     = unsafe { read_data(data_ptr, data_sz) };
+
+    let key = {
+        let mut mac = Hmac::new(Sha512::new(), &password);
+        let mut key: Vec<u8> = repeat(0).take(KEY_SIZE).collect();
+        pbkdf2(&mut mac, &salt[..], ITER, &mut key);
+        key
+    };
+
+    let mut tag = [0;TAG_SIZE];
+    let mut encrypted : Vec<u8> = repeat(0).take(data.len()).collect();
+    {
+        ChaCha20Poly1305::new(&key, &nonce, &[])
+            .encrypt(&data, &mut encrypted, &mut tag);
+    }
+
+    let mut output = Vec::with_capacity(data.len() + METADATA_SIZE);
+    output.extend_from_slice(&salt);
+    output.extend_from_slice(&nonce);
+    output.extend_from_slice(&tag);
+    output.extend_from_slice(&encrypted);
+
+    unsafe { write_data(&output, output_ptr) };
+
+    output.len() as i32
+}
+
+
+#[no_mangle]
+pub extern "C" fn decrypt_with_password( password_ptr: *const c_uchar
+                                       , password_sz: usize
+                                       , data_ptr: *const c_uchar
+                                       , data_sz: usize
+                                       , output_ptr: *mut c_uchar
+                                       )
+    -> i32
+{
+    use password_encryption_parameter::*;
+    let password = unsafe { read_data(password_ptr, password_sz) };
+    let data = unsafe { read_data(data_ptr, data_sz) };
+
+    let salt = &data[SALT_START..SALT_END];
+    let nonce = &data[NONCE_START..NONCE_END];
+    let tag = &data[TAG_START..TAG_END];
+    let encrypted = &data[ENCRYPTED_START..];
+
+    let key = {
+        let mut mac = Hmac::new(Sha512::new(), &password);
+        let mut key: Vec<u8> = repeat(0).take(KEY_SIZE).collect();
+        pbkdf2(&mut mac, &salt[..], ITER, &mut key);
+        key
+    };
+
+    let mut decrypted : Vec<u8> = repeat(0).take(encrypted.len()).collect();
+    let decryption_succeed = {
+        ChaCha20Poly1305::new(&key, &nonce, &[])
+            .decrypt(&encrypted, &mut decrypted, &tag)
+    };
+
+    if decryption_succeed {
+        unsafe { write_data(&decrypted, output_ptr) };
+        decrypted.len() as i32
+    } else {
+        -1
+    }
 }
