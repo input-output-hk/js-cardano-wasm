@@ -3,6 +3,7 @@ import RustModule from './RustModule';
 import { newArray, newArray0, copyArray } from './utils/arrays';
 import { apply } from './utils/functions';
 import { base16 } from './utils/strings';
+import { SEED_SIZE } from './HdWallet';
 
 const MAX_OUTPUT_SIZE = 4096;
 
@@ -11,9 +12,11 @@ const MAX_OUTPUT_SIZE = 4096;
  *
  * @param module - the WASM module that is used for crypto operations
  * @param seed   - the 32 bytes seed to generate the wallet from
- * @returns {*}  - a wallet object (JSON object)
+ * @returns {*}  - a wallet object (JSON object) or false if the seed is not 32bytes long
  */
 export const fromSeed = (module, seed) => {
+    if (seed.length !== SEED_SIZE) { return false; }
+
     const input_str = JSON.stringify(seed);
     const input_array = iconv.encode(input_str, 'utf8');
 
