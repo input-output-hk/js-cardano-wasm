@@ -2,19 +2,21 @@
 name = "cardano"
 version = "0.1.0"
 dependencies = [
- "cbor_event 0.1.0",
- "cryptoxide 0.1.0",
+ "cbor_event 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "cryptoxide 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde 1.0.66 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_derive 1.0.66 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
 name = "cbor_event"
-version = "0.1.0"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "cryptoxide"
 version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "dtoa"
@@ -87,14 +89,16 @@ name = "wallet-wasm"
 version = "0.1.0"
 dependencies = [
  "cardano 0.1.0",
- "cbor_event 0.1.0",
- "cryptoxide 0.1.0",
+ "cbor_event 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "cryptoxide 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde 1.0.66 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_derive 1.0.66 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_json 1.0.19 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [metadata]
+"checksum cbor_event 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)" = "29a95a1de12d1f5a3ff0c34cd2578f625a5feddb5d5672546ebbbecdb6287a0f"
+"checksum cryptoxide 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "bc9be687df90da186ed5c6ada0b6b4d69f5ad914071870bc5d41277377d30427"
 "checksum dtoa 0.4.2 (registry+https://github.com/rust-lang/crates.io-index)" = "09c3753c3db574d215cba4ea76018483895d7bff25a31b49ba45db21c48e50ab"
 "checksum itoa 0.4.1 (registry+https://github.com/rust-lang/crates.io-index)" = "c069bbec61e1ca5a596166e55dfe4773ff745c3d16b700013bcaff9a6df2c682"
 "checksum proc-macro2 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)" = "effdb53b25cdad54f8f48843d67398f7ef2e14f12c1b4cb4effc549a6462a4d6"
