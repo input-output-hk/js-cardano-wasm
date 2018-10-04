@@ -660,7 +660,8 @@ impl serde::Serialize for Coin
     fn serialize<S>(&self, serializer: S) -> result::Result<S::Ok, S::Error>
         where S: serde::Serializer,
     {
-        serializer.serialize_str(&format!("{}", self.0))
+        let v : u64 = *self.0;
+        serializer.serialize_str(&format!("{}", v))
     }
 }
 struct CoinVisitor();
@@ -668,7 +669,7 @@ impl<'de> serde::de::Visitor<'de> for CoinVisitor {
     type Value = Coin;
 
     fn expecting(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-        write!(fmt, "Expecting a Blake2b_256 hash (`Hash`)")
+        write!(fmt, "Lovelace Ada")
     }
 
     fn visit_str<'a, E>(self, v: &'a str) -> result::Result<Self::Value, E>
