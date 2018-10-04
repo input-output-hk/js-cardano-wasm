@@ -18,9 +18,9 @@ use self::cardano::hdwallet;
 use self::cardano::paperwallet;
 use self::cardano::address;
 use self::cardano::hdpayload;
-use self::cardano::{util::{hex}, tx, fee, input_selection, coin, txutils};
+use self::cardano::{util::{hex}, tx, fee, coin, txutils};
 use self::cardano::config::{Config};
-use self::cardano::wallet::{self, bip44, rindex, scheme::{Wallet}};
+use self::cardano::wallet::{self, bip44, rindex, scheme::{Wallet, SelectionPolicy}};
 use self::cardano::bip::{bip39};
 
 use self::cardano::util::try_from_slice::{TryFromSlice};
@@ -550,7 +550,7 @@ pub struct Bip44Wallet {
     root_cached_key: hdwallet::XPrv,
 
     config: Config,
-    selection_policy: input_selection::SelectionPolicy,
+    selection_policy: SelectionPolicy,
     derivation_scheme: hdwallet::DerivationScheme,
 }
 impl Bip44Wallet {
@@ -568,7 +568,7 @@ pub extern "C" fn xwallet_create(input_ptr: *const c_uchar, input_sz: usize, out
     let seed = input_json!(output_ptr, input_ptr, input_sz);
 
     let derivation_scheme = hdwallet::DerivationScheme::V2;
-    let selection_policy = input_selection::SelectionPolicy::FirstMatchFirst;
+    let selection_policy = SelectionPolicy::FirstMatchFirst;
     let config = Config::default();
 
     let xprv = hdwallet::XPrv::generate_from_seed(&seed);
@@ -591,7 +591,7 @@ pub extern "C" fn xwallet_from_master_key(input_ptr: *const c_uchar, output_ptr:
     let xprv = unsafe { read_xprv(input_ptr) };
 
     let derivation_scheme = hdwallet::DerivationScheme::V2;
-    let selection_policy = input_selection::SelectionPolicy::FirstMatchFirst;
+    let selection_policy = SelectionPolicy::FirstMatchFirst;
     let config = Config::default();
 
     let bip44_wallet = bip44::Wallet::from_root_key(xprv, derivation_scheme);
@@ -613,7 +613,7 @@ pub struct DaedalusWallet {
     root_cached_key: hdwallet::XPrv,
 
     config: Config,
-    selection_policy: input_selection::SelectionPolicy,
+    selection_policy: SelectionPolicy,
     derivation_scheme: hdwallet::DerivationScheme,
 }
 impl DaedalusWallet {
@@ -631,7 +631,7 @@ pub extern "C" fn xwallet_create_daedalus_mnemonic(input_ptr: *const c_uchar, in
     let mnemonics_phrase : String = input_json!(output_ptr, input_ptr, input_sz);
 
     let derivation_scheme = hdwallet::DerivationScheme::V1;
-    let selection_policy = input_selection::SelectionPolicy::FirstMatchFirst;
+    let selection_policy = SelectionPolicy::FirstMatchFirst;
     let config = Config::default();
 
     let daedalus_wallet = jrpc_try!(output_ptr, rindex::Wallet::from_daedalus_mnemonics(
