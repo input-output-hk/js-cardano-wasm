@@ -24,7 +24,7 @@ export const scramble = (module, iv, password, input) => {
 /**
  * A sugar method on top of `scramble` that expects string params.
  * @param module - the WASM module that is used for crypto operations
- * @param iv: Uint8Array - 4 random bytes of entropy
+ * @param iv: Uint8Array - 8 random bytes of entropy
  * @param password: string
  * @param mnenomics: string (12 word mnemonics which should be scrambled))
  * @returns {*} - the scrambled 15 words

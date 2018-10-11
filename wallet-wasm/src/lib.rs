@@ -18,10 +18,12 @@ use self::cardano::hdwallet;
 use self::cardano::paperwallet;
 use self::cardano::address;
 use self::cardano::hdpayload;
-use self::cardano::{util::{hex}, tx, fee, coin, hash::{HASH_SIZE}, txutils};
+use self::cardano::{util::{hex}, tx, fee, coin, txutils};
 use self::cardano::config::{Config};
-use self::cardano::wallet::{self, bip44, rindex, scheme::{Wallet}};
+use self::cardano::wallet::{self, bip44, rindex, scheme::{Wallet, SelectionPolicy}};
 use self::cardano::bip::{bip39};
+
+use self::cardano::util::try_from_slice::{TryFromSlice};
 
 use std::{mem, result, string, convert, fmt};
 use std::ffi::{CStr, CString};
@@ -250,7 +252,7 @@ pub extern "C" fn wallet_public_to_address(xpub_ptr: *const c_uchar, payload_ptr
     let attrs = address::Attributes::new_bootstrap_era(Some(hdap));
     let ea = address::ExtendedAddr::new(addr_type, sd, attrs);
 
-    let ea_bytes = ea.to_bytes();
+    let ea_bytes = cbor!(ea).unwrap();
 
     unsafe { write_data(&ea_bytes, out) }
 
@@ -260,7 +262,7 @@ pub extern "C" fn wallet_public_to_address(xpub_ptr: *const c_uchar, payload_ptr
 #[no_mangle]
 pub extern "C" fn wallet_address_get_payload(addr_ptr: *const c_uchar, addr_sz: usize, out: *mut c_uchar) -> u32 {
     let addr_bytes = unsafe { read_data(addr_ptr, addr_sz) };
-    match address::ExtendedAddr::from_bytes(&addr_bytes).ok() {
+    match address::ExtendedAddr::try_from_slice(&addr_bytes).ok() {
         None => (-1i32) as u32,
         Some(r)  => {
             match r.attributes.derivation_path {
@@ -315,11 +317,11 @@ pub extern "C" fn wallet_payload_decrypt(key_ptr: *const c_uchar, payload_ptr: *
 
 #[no_mangle]
 pub extern "C" fn wallet_txin_create(txid_ptr: *const c_uchar, index: u32, out: *mut c_uchar) -> u32 {
-    let txid_bytes = unsafe { read_data(txid_ptr, HASH_SIZE) };
+    let txid_bytes = unsafe { read_data(txid_ptr, tx::TxId::HASH_SIZE) };
 
-    let txid = tx::TxId::from_slice(&txid_bytes).unwrap();
+    let txid = tx::TxId::try_from_slice(&txid_bytes).unwrap();
 
-    let txin = tx::TxIn::new(txid, index);
+    let txin = tx::TxoPointer::new(txid, index);
     let out_buf = cbor!(&txin).unwrap();
 
     unsafe { write_data(&out_buf, out) }
@@ -330,7 +332,7 @@ pub extern "C" fn wallet_txin_create(txid_ptr: *const c_uchar, index: u32, out: 
 pub extern "C" fn wallet_txout_create(ea_ptr: *const c_uchar, ea_sz: usize, amount: u32, out: *mut c_uchar) -> u32 {
     let ea_bytes = unsafe { read_data(ea_ptr, ea_sz) };
 
-    let ea = address::ExtendedAddr::from_bytes(&ea_bytes).unwrap();
+    let ea = address::ExtendedAddr::try_from_slice(&ea_bytes).unwrap();
     let coin = coin::Coin::new(amount as u64).unwrap();
 
     let txout = tx::TxOut::new(ea, coin);
@@ -548,7 +550,7 @@ pub struct Bip44Wallet {
     root_cached_key: hdwallet::XPrv,
 
     config: Config,
-    selection_policy: fee::SelectionPolicy,
+    selection_policy: SelectionPolicy,
     derivation_scheme: hdwallet::DerivationScheme,
 }
 impl Bip44Wallet {
@@ -566,7 +568,7 @@ pub extern "C" fn xwallet_create(input_ptr: *const c_uchar, input_sz: usize, out
     let seed = input_json!(output_ptr, input_ptr, input_sz);
 
     let derivation_scheme = hdwallet::DerivationScheme::V2;
-    let selection_policy = fee::SelectionPolicy::FirstMatchFirst;
+    let selection_policy = SelectionPolicy::FirstMatchFirst;
     let config = Config::default();
 
     let xprv = hdwallet::XPrv::generate_from_seed(&seed);
@@ -589,7 +591,7 @@ pub extern "C" fn xwallet_from_master_key(input_ptr: *const c_uchar, output_ptr:
     let xprv = unsafe { read_xprv(input_ptr) };
 
     let derivation_scheme = hdwallet::DerivationScheme::V2;
-    let selection_policy = fee::SelectionPolicy::FirstMatchFirst;
+    let selection_policy = SelectionPolicy::FirstMatchFirst;
     let config = Config::default();
 
     let bip44_wallet = bip44::Wallet::from_root_key(xprv, derivation_scheme);
@@ -611,7 +613,7 @@ pub struct DaedalusWallet {
     root_cached_key: hdwallet::XPrv,
 
     config: Config,
-    selection_policy: fee::SelectionPolicy,
+    selection_policy: SelectionPolicy,
     derivation_scheme: hdwallet::DerivationScheme,
 }
 impl DaedalusWallet {
@@ -629,7 +631,7 @@ pub extern "C" fn xwallet_create_daedalus_mnemonic(input_ptr: *const c_uchar, in
     let mnemonics_phrase : String = input_json!(output_ptr, input_ptr, input_sz);
 
     let derivation_scheme = hdwallet::DerivationScheme::V1;
-    let selection_policy = fee::SelectionPolicy::FirstMatchFirst;
+    let selection_policy = SelectionPolicy::FirstMatchFirst;
     let config = Config::default();
 
     let daedalus_wallet = jrpc_try!(output_ptr, rindex::Wallet::from_daedalus_mnemonics(
@@ -658,7 +660,8 @@ impl serde::Serialize for Coin
     fn serialize<S>(&self, serializer: S) -> result::Result<S::Ok, S::Error>
         where S: serde::Serializer,
     {
-        serializer.serialize_str(&format!("{}", self.0))
+        let v : u64 = *self.0;
+        serializer.serialize_str(&format!("{}", v))
     }
 }
 struct CoinVisitor();
@@ -666,7 +669,7 @@ impl<'de> serde::de::Visitor<'de> for CoinVisitor {
     type Value = Coin;
 
     fn expecting(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-        write!(fmt, "Expecting a Blake2b_256 hash (`Hash`)")
+        write!(fmt, "Lovelace Ada")
     }
 
     fn visit_str<'a, E>(self, v: &'a str) -> result::Result<Self::Value, E>
@@ -711,8 +714,8 @@ pub struct TxIn {
     index: u32
 }
 impl TxIn {
-    fn convert(&self) -> tx::TxIn {
-        tx::TxIn {
+    fn convert(&self) -> tx::TxoPointer {
+        tx::TxoPointer {
             id: self.id,
             index: self.index
         }
@@ -793,11 +796,11 @@ pub struct TxInInfo {
     pub addressing: [u32;2]
 }
 impl TxInInfo {
-    fn convert(&self) -> txutils::TxInInfo<<rindex::Wallet as Wallet>::Addressing> {
-        txutils::TxInInfo {
+    fn convert(&self) -> txutils::TxoPointerInfo<<rindex::Wallet as Wallet>::Addressing> {
+        txutils::TxoPointerInfo {
             txin: self.ptr.convert(),
             value: self.value.0,
-            address_identified: (self.addressing[0], self.addressing[1])
+            address_identified: rindex::Addressing::new(self.addressing[0], self.addressing[1])
         }
     }
 }
@@ -809,7 +812,7 @@ struct WalletMoveInput {
     output: address::ExtendedAddr
 }
 impl WalletMoveInput {
-    fn get_inputs(&self) -> Vec<txutils::TxInInfo<<rindex::Wallet as Wallet>::Addressing>> {
+    fn get_inputs(&self) -> Vec<txutils::TxoPointerInfo<<rindex::Wallet as Wallet>::Addressing>> {
         self.inputs.iter().map(|i| i.convert()).collect()
     }
 }
