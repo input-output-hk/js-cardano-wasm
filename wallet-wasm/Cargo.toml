@@ -20,6 +20,11 @@ path = "../rust/cardano"
 features = [ "generic-serialization" ]
 
 [lib]
+crate-type = ["lib"]
+
+[[example]]
+name = "wallet_wasm"
+path = "src/lib.rs"
 crate-type = ["cdylib"]
 
 [profile.release]
