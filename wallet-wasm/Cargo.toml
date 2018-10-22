@@ -20,7 +20,7 @@ path = "../rust/cardano"
 features = [ "generic-serialization" ]
 
 [lib]
-crate-type = ["lib", "cdylib"]
+crate-type = ["cdylib"]
 
 [profile.release]
 debug = false
