@@ -3,10 +3,10 @@ import RustModule from './RustModule';
 import { newArray, newArray0, copyArray } from './utils/arrays';
 import { apply } from './utils/functions';
 
-const SEED_SIZE = 32;
-const XPRV_SIZE = 96;
-const XPUB_SIZE = 64;
-const SIGNATURE_SIZE = 64;
+export const SEED_SIZE = 32;
+export const XPRV_SIZE = 96;
+export const XPUB_SIZE = 64;
+export const SIGNATURE_SIZE = 64;
 
 
 /**
@@ -167,5 +167,9 @@ export default {
   derivePublic: apply(derivePublic, RustModule),
   sign: apply(sign, RustModule),
   publicKeyToAddress: apply(publicKeyToAddress, RustModule),
-  addressGetPayload: apply(addressGetPayload, RustModule)
+  addressGetPayload: apply(addressGetPayload, RustModule),
+  SEED_SIZE: SEED_SIZE,
+  XPRV_SIZE: XPRV_SIZE,
+  XPUB_SIZE: XPUB_SIZE,
+  SIGNATURE_SIZE: SIGNATURE_SIZE,
 };
