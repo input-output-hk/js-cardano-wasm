@@ -15,7 +15,7 @@ wasm-bindgen =  { version = "0.2", features = [ "serde-serialize" ] }
 serde = "1.0"
 serde_derive = "1.0"
 cryptoxide = "0.1"
-cbor_event = "1.0"
+cbor_event = "^2.1.2"
 cardano = { path = "../rust/cardano", features = ["generic-serialization"] }
 
 
