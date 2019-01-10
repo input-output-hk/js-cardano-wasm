@@ -915,6 +915,77 @@ impl TransactionFinalized {
 }
 
 /* ************************************************************************* *
+ *                         Redemption keys                                   *
+ * ************************************************************************* *
+ *
+ * Retrieve the redemption keys and redeem to a given address
+ */
+
+use self::cardano::redeem;
+
+#[wasm_bindgen]
+pub struct PrivateRedeemKey(redeem::PrivateKey);
+#[wasm_bindgen]
+impl PrivateRedeemKey {
+    /// retrieve a private key from the given hexadecimal string
+    pub fn from_hex(hex: &str) -> Result<PrivateRedeemKey, JsValue> {
+        redeem::PrivateKey::from_hex(hex)
+            .map_err(|e| JsValue::from_str(&format! {"{:?}", e}))
+            .map(PrivateRedeemKey)
+    }
+    /// convert the private key to an hexadecimal string
+    pub fn to_hex(&self) -> String {
+        format!("{}", self.0)
+    }
+
+    /// get the public key associated to this private key
+    pub fn public(&self) -> PublicRedeemKey {
+        PublicRedeemKey(self.0.public())
+    }
+
+    /// sign some bytes with this private key
+    pub fn sign(&self, data: &[u8]) -> RedeemSignature {
+        let signature = self.0.sign(data);
+        RedeemSignature(signature)
+    }
+}
+
+#[wasm_bindgen]
+pub struct PublicRedeemKey(redeem::PublicKey);
+#[wasm_bindgen]
+impl PublicRedeemKey {
+    /// retrieve a public key from the given hexadecimal string
+    pub fn from_hex(hex: &str) -> Result<PublicRedeemKey, JsValue> {
+        redeem::PublicKey::from_hex(hex)
+            .map_err(|e| JsValue::from_str(&format! {"{:?}", e}))
+            .map(PublicRedeemKey)
+    }
+    /// convert the public key to an hexadecimal string
+    pub fn to_hex(&self) -> String {
+        format!("{}", self.0)
+    }
+
+    /// verify the signature with the given public key
+    pub fn verify(&self, data: &[u8], signature: &RedeemSignature) -> bool {
+        self.0.verify(&signature.0, data)
+    }
+}
+
+#[wasm_bindgen]
+pub struct RedeemSignature(redeem::Signature);
+#[wasm_bindgen]
+impl RedeemSignature {
+    pub fn from_hex(hex: &str) -> Result<RedeemSignature, JsValue> {
+        redeem::Signature::from_hex(hex)
+            .map_err(|e| JsValue::from_str(&format! {"{:?}", e}))
+            .map(RedeemSignature)
+    }
+    pub fn to_hex(&self) -> String {
+        format!("{}", self.0)
+    }
+}
+
+/* ************************************************************************* *
  *                          Password Encrypted Data                          *
  * ************************************************************************* *
  *
