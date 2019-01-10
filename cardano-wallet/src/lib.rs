@@ -952,6 +952,13 @@ use self::cardano::redeem;
 pub struct PrivateRedeemKey(redeem::PrivateKey);
 #[wasm_bindgen]
 impl PrivateRedeemKey {
+    /// retrieve the private redeeming key from the given bytes (expect 64 bytes)
+    pub fn from_bytes(bytes: &[u8]) -> Result<PrivateRedeemKey, JsValue> {
+        redeem::PrivateKey::from_slice(bytes)
+            .map_err(|e| JsValue::from_str(&format! {"{:?}", e}))
+            .map(PrivateRedeemKey)
+    }
+
     /// retrieve a private key from the given hexadecimal string
     pub fn from_hex(hex: &str) -> Result<PrivateRedeemKey, JsValue> {
         redeem::PrivateKey::from_hex(hex)
@@ -993,6 +1000,19 @@ impl PublicRedeemKey {
     /// verify the signature with the given public key
     pub fn verify(&self, data: &[u8], signature: &RedeemSignature) -> bool {
         self.0.verify(&signature.0, data)
+    }
+
+    /// generate the address for this redeeming key
+    pub fn address(&self, settings: &BlockchainSettings) -> Address {
+        let address_type = address::AddrType::ATRedeem;
+        let spending_data = address::SpendingData::RedeemASD(self.0.clone());
+        let attributes =
+            address::Attributes::new_bootstrap_era(None, settings.protocol_magic.into());
+        Address(address::ExtendedAddr::new(
+            address_type,
+            spending_data,
+            attributes,
+        ))
     }
 }
 
