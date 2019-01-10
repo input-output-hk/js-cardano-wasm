@@ -433,10 +433,10 @@ impl DaedalusWallet {
             blake2b.input(&entropy_cbor);
             let mut out = [0; 32];
             blake2b.result(&mut out);
-            cbor_event::se::Serializer::new_vec()
-                .write_bytes(&Vec::from(&out[..]))
-                .map_err(|e| JsValue::from_str(&format! {"{:?}", e}))?
-                .finalize()
+            let mut se = cbor_event::se::Serializer::new_vec();
+            se.write_bytes(&Vec::from(&out[..]))
+                .map_err(|e| JsValue::from_str(&format! {"{:?}", e}))?;
+            se.finalize()
         };
 
         let key = PrivateKey(hdwallet::XPrv::generate_from_daedalus_seed(&seed));
