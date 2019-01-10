@@ -273,10 +273,10 @@ impl PublicKey {
 pub struct Address(address::ExtendedAddr);
 #[wasm_bindgen]
 impl Address {
-    pub fn to_hex(&self) -> String {
+    pub fn to_base58(&self) -> String {
         format!("{}", self.0)
     }
-    pub fn from_hex(s: &str) -> Result<Address, JsValue> {
+    pub fn from_base58(s: &str) -> Result<Address, JsValue> {
         use std::str::FromStr;
         address::ExtendedAddr::from_str(s)
             .map_err(|e| JsValue::from_str(&format! {"{:?}", e}))
