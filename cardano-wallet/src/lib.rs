@@ -237,8 +237,11 @@ impl PublicKey {
 
     /// get the bootstrap era address. I.E. this is an address without
     /// stake delegation.
-    pub fn bootstrap_era_address(&self) -> Address {
-        Address(address::ExtendedAddr::new_simple(self.0.clone()))
+    pub fn bootstrap_era_address(&self, blockchain_settings: &BlockchainSettings) -> Address {
+        Address(address::ExtendedAddr::new_simple(
+            self.0.clone(),
+            blockchain_settings.protocol_magic.into(),
+        ))
     }
 }
 
