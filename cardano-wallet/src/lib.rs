@@ -17,7 +17,7 @@ use wasm_bindgen::prelude::*;
 use self::cardano::{
     address,
     bip::{bip39, bip44},
-    coin, config, fee, hash, hdpayload, hdwallet, tx, txbuild, txutils, util, wallet,
+    coin, config, fee, hash, hdpayload, hdwallet, paperwallet, tx, txbuild, txutils, util, wallet,
 };
 
 /// setting of the blockchain
@@ -25,7 +25,7 @@ use self::cardano::{
 /// This includes the `ProtocolMagic` a discriminant value to differentiate
 /// different instances of the cardano blockchain (Mainnet, Testnet... ).
 #[wasm_bindgen]
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BlockchainSettings {
     /// code of a specific blockchain used to sign transactions and blocks
     protocol_magic: config::ProtocolMagic,
@@ -66,7 +66,7 @@ impl BlockchainSettings {
 /// Its support is already provided for backward compatibility with old
 /// addresses.
 #[wasm_bindgen]
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DerivationScheme(hdwallet::DerivationScheme);
 #[wasm_bindgen]
 impl DerivationScheme {
@@ -95,6 +95,7 @@ impl DerivationScheme {
 /// * make sure the user remembers the mnemonics string;
 ///
 #[wasm_bindgen]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Entropy(bip39::Entropy);
 #[wasm_bindgen]
 impl Entropy {
@@ -140,7 +141,7 @@ impl Entropy {
 ///   with it;
 ///
 #[wasm_bindgen]
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PrivateKey(hdwallet::XPrv);
 #[wasm_bindgen]
 impl PrivateKey {
@@ -203,6 +204,7 @@ impl PrivateKey {
 ///   only the privacy is leaked;
 ///
 #[wasm_bindgen]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PublicKey(hdwallet::XPub);
 #[wasm_bindgen]
 impl PublicKey {
@@ -267,7 +269,7 @@ impl PublicKey {
 }
 
 #[wasm_bindgen]
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Address(address::ExtendedAddr);
 #[wasm_bindgen]
 impl Address {
@@ -283,6 +285,7 @@ impl Address {
 }
 
 #[wasm_bindgen]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Signature(hdwallet::Signature<()>);
 #[wasm_bindgen]
 impl Signature {
@@ -305,6 +308,7 @@ impl Signature {
  */
 
 #[wasm_bindgen]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct AccountIndex(u32);
 #[wasm_bindgen]
 impl AccountIndex {
@@ -319,6 +323,7 @@ impl AccountIndex {
     }
 }
 #[wasm_bindgen]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct AddressKeyIndex(u32);
 #[wasm_bindgen]
 impl AddressKeyIndex {
@@ -335,6 +340,7 @@ impl AddressKeyIndex {
 
 /// Root Private Key of a BIP44 HD Wallet
 #[wasm_bindgen]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Bip44RootPrivateKey {
     key: PrivateKey,
     derivation_scheme: DerivationScheme,
@@ -441,12 +447,8 @@ impl Bip44AccountPublic {
 pub struct DaedalusWallet(PrivateKey);
 #[wasm_bindgen]
 impl DaedalusWallet {
-    pub fn recover(mnemonics: &str) -> Result<DaedalusWallet, JsValue> {
-        let mnemonics = bip39::Mnemonics::from_string(&bip39::dictionary::ENGLISH, mnemonics)
-            .map_err(|e| JsValue::from_str(&format! {"{:?}", e}))?;
-        let entropy = bip39::Entropy::from_mnemonics(&mnemonics)
-            .map_err(|e| JsValue::from_str(&format! {"{:?}", e}))?;
-        let entropy_bytes = cbor_event::Value::Bytes(Vec::from(entropy.as_ref()));
+    pub fn recover(entropy: &Entropy) -> Result<DaedalusWallet, JsValue> {
+        let entropy_bytes = cbor_event::Value::Bytes(Vec::from(entropy.0.as_ref()));
         let entropy_cbor =
             cbor!(&entropy_bytes).map_err(|e| JsValue::from_str(&format! {"{:?}", e}))?;
         let seed: Vec<u8> = {
@@ -493,20 +495,23 @@ impl DaedalusAddressChecker {
     ///
     /// The return private key is the key needed to sign the transaction to unlock
     /// UTxO associated to the address.
-    pub fn check_address(&self, address: &Address) -> Option<PrivateKey> {
+    pub fn check_address(&self, address: &Address) -> Result<CheckedAddress, JsValue> {
         if let Some(hdpa) = &address.0.attributes.derivation_path.clone() {
             if let Ok(path) = self.payload_key.decrypt_path(hdpa) {
                 let mut key = self.wallet.clone();
                 for index in path.iter() {
                     key = key.derive(DerivationScheme::v1(), *index);
                 }
-                return Some(key);
+                return Ok(CheckedAddress(Some(key)));
             }
         }
 
-        None
+        Ok(CheckedAddress(None))
     }
 }
+
+#[wasm_bindgen]
+pub struct CheckedAddress(Option<PrivateKey>);
 
 /* ************************************************************************* *
  *                          Transaction Builder                              *
@@ -983,6 +988,46 @@ impl RedeemSignature {
     pub fn to_hex(&self) -> String {
         format!("{}", self.0)
     }
+}
+
+/* ************************************************************************* *
+ *                          Paper wallet scrambling                          *
+ * ************************************************************************* *
+ *
+ * the API for the paper wallet
+ */
+
+#[wasm_bindgen]
+pub fn paper_wallet_scramble(
+    entropy: &Entropy,
+    iv: &[u8],
+    password: &str,
+) -> Result<JsValue, JsValue> {
+    if iv.len() != paperwallet::IV_SIZE {
+        return Err(JsValue::from_str(&format!(
+            "Invalid IV size, expected 8 random bytes but received {} bytes",
+            iv.len(),
+        )));
+    }
+
+    let bytes = paperwallet::scramble(iv, password.as_bytes(), entropy.0.as_ref());
+
+    JsValue::from_serde(&bytes).map_err(|e| JsValue::from_str(&format! {"{:?}", e}))
+}
+
+#[wasm_bindgen]
+pub fn paper_wallet_unscramble(paper: &[u8], password: &str) -> Result<Entropy, JsValue> {
+    if paper.len() <= paperwallet::IV_SIZE {
+        return Err(JsValue::from_str(&format!(
+            "Not enough data to decode the paper wallet, expecting at least 8 bytes but received {} bytes",
+            paper.len(),
+        )));
+    }
+    let bytes = paperwallet::unscramble(password.as_bytes(), paper);
+
+    bip39::Entropy::from_slice(&bytes)
+        .map_err(|e| JsValue::from_str(&format! {"{:?}", e}))
+        .map(Entropy)
 }
 
 /* ************************************************************************* *
