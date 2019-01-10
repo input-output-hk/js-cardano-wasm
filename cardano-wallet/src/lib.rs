@@ -22,6 +22,8 @@ use self::cardano::{
 
 /// setting of the blockchain
 ///
+/// This includes the `ProtocolMagic` a discriminant value to differentiate
+/// different instances of the cardano blockchain (Mainnet, Testnet... ).
 #[wasm_bindgen]
 #[derive(Serialize, Deserialize)]
 pub struct BlockchainSettings {
@@ -30,9 +32,24 @@ pub struct BlockchainSettings {
 }
 #[wasm_bindgen]
 impl BlockchainSettings {
+    /// serialize into a JsValue object. Allowing the client to store the settings
+    /// or see changes in the settings or change the settings.
+    ///
+    /// Note that this is not recommended to change the settings on the fly. Doing
+    /// so you might not be able to recover your funds anymore or to send new
+    /// transactions.
     pub fn to_json(&self) -> Result<JsValue, JsValue> {
         JsValue::from_serde(self).map_err(|e| JsValue::from_str(&format! {"{:?}", e}))
     }
+
+    /// retrieve the object from a JsValue.
+    pub fn from_json(value: JsValue) -> Result<Self, JsValue> {
+        value
+            .into_serde()
+            .map_err(|e| JsValue::from_str(&format! {"{:?}", e}))
+    }
+
+    /// default settings to work with Cardano Mainnet
     pub fn mainnet() -> BlockchainSettings {
         BlockchainSettings {
             protocol_magic: config::ProtocolMagic::default(),
@@ -59,6 +76,7 @@ impl DerivationScheme {
         DerivationScheme(hdwallet::DerivationScheme::V1)
     }
 
+    /// the recommended settings
     pub fn v2() -> DerivationScheme {
         DerivationScheme(hdwallet::DerivationScheme::V2)
     }
@@ -80,6 +98,8 @@ impl DerivationScheme {
 pub struct Entropy(bip39::Entropy);
 #[wasm_bindgen]
 impl Entropy {
+    /// retrieve the initial entropy of a wallet from the given
+    /// english mnemonics.
     pub fn from_english_mnemonics(mnemonics: &str) -> Result<Entropy, JsValue> {
         Self::from_mnemonics(&bip39::dictionary::ENGLISH, mnemonics)
     }
@@ -357,10 +377,9 @@ impl Bip44RootPrivateKey {
     }
 }
 
-#[wasm_bindgen]
 pub struct Bip44AccountPrivate {
-    key: PrivateKey,
-    derivation_scheme: DerivationScheme,
+    pub key: PrivateKey,
+    pub derivation_scheme: DerivationScheme,
 }
 #[wasm_bindgen]
 impl Bip44AccountPrivate {
@@ -383,10 +402,9 @@ impl Bip44AccountPrivate {
     }
 }
 
-#[wasm_bindgen]
 pub struct Bip44AccountPublic {
-    key: PublicKey,
-    derivation_scheme: DerivationScheme,
+    pub key: PublicKey,
+    pub derivation_scheme: DerivationScheme,
 }
 #[wasm_bindgen]
 impl Bip44AccountPublic {
@@ -619,6 +637,7 @@ impl Transaction {
     }
 }
 
+/// a signed transaction, ready to be sent to the network.
 #[wasm_bindgen]
 pub struct SignedTransaction(tx::TxAux);
 #[wasm_bindgen]
