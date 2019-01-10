@@ -495,23 +495,43 @@ impl DaedalusAddressChecker {
     ///
     /// The return private key is the key needed to sign the transaction to unlock
     /// UTxO associated to the address.
-    pub fn check_address(&self, address: &Address) -> Result<CheckedAddress, JsValue> {
+    pub fn check_address(&self, address: &Address) -> Result<DaedalusCheckedAddress, JsValue> {
         if let Some(hdpa) = &address.0.attributes.derivation_path.clone() {
             if let Ok(path) = self.payload_key.decrypt_path(hdpa) {
                 let mut key = self.wallet.clone();
                 for index in path.iter() {
                     key = key.derive(DerivationScheme::v1(), *index);
                 }
-                return Ok(CheckedAddress(Some(key)));
+                return Ok(DaedalusCheckedAddress(Some(key)));
             }
         }
 
-        Ok(CheckedAddress(None))
+        Ok(DaedalusCheckedAddress(None))
     }
 }
 
+/// result value of the check_address function of the DaedalusAddressChecker.
+///
+/// If the address passed to check_address was recognised by the daedalus wallet
+/// then this object will contain the private key associated to this wallet
+/// private key necessary to sign transactions
 #[wasm_bindgen]
-pub struct CheckedAddress(Option<PrivateKey>);
+pub struct DaedalusCheckedAddress(Option<PrivateKey>);
+#[wasm_bindgen]
+impl DaedalusCheckedAddress {
+    /// return if the value contains the private key (i.e. the check_address
+    /// recognised an address).
+    pub fn is_checked(&self) -> bool {
+        self.0.is_some()
+    }
+
+    pub fn private_key(&self) -> Result<PrivateKey, JsValue> {
+        match &self.0 {
+            None => Err(JsValue::from_str(&format!("Daedalus Address didn't check"))),
+            Some(ref sk) => Ok(sk.clone()),
+        }
+    }
+}
 
 /* ************************************************************************* *
  *                          Transaction Builder                              *
