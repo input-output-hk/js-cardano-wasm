@@ -17,7 +17,7 @@ use wasm_bindgen::prelude::*;
 use self::cardano::{
     address,
     bip::{bip39, bip44},
-    coin, config, fee, hdwallet, tx, txbuild, txutils, util, wallet,
+    coin, config, fee, hash, hdpayload, hdwallet, tx, txbuild, txutils, util, wallet,
 };
 
 /// setting of the blockchain
@@ -43,7 +43,7 @@ impl BlockchainSettings {
     }
 
     /// retrieve the object from a JsValue.
-    pub fn from_json(value: JsValue) -> Result<Self, JsValue> {
+    pub fn from_json(value: JsValue) -> Result<BlockchainSettings, JsValue> {
         value
             .into_serde()
             .map_err(|e| JsValue::from_str(&format! {"{:?}", e}))
@@ -140,6 +140,7 @@ impl Entropy {
 ///   with it;
 ///
 #[wasm_bindgen]
+#[derive(Clone)]
 pub struct PrivateKey(hdwallet::XPrv);
 #[wasm_bindgen]
 impl PrivateKey {
@@ -266,6 +267,7 @@ impl PublicKey {
 }
 
 #[wasm_bindgen]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Address(address::ExtendedAddr);
 #[wasm_bindgen]
 impl Address {
@@ -377,9 +379,10 @@ impl Bip44RootPrivateKey {
     }
 }
 
+#[wasm_bindgen]
 pub struct Bip44AccountPrivate {
-    pub key: PrivateKey,
-    pub derivation_scheme: DerivationScheme,
+    key: PrivateKey,
+    derivation_scheme: DerivationScheme,
 }
 #[wasm_bindgen]
 impl Bip44AccountPrivate {
@@ -402,9 +405,10 @@ impl Bip44AccountPrivate {
     }
 }
 
+#[wasm_bindgen]
 pub struct Bip44AccountPublic {
-    pub key: PublicKey,
-    pub derivation_scheme: DerivationScheme,
+    key: PublicKey,
+    derivation_scheme: DerivationScheme,
 }
 #[wasm_bindgen]
 impl Bip44AccountPublic {
@@ -461,6 +465,46 @@ impl DaedalusWallet {
 
         let rpk = DaedalusWallet(key);
         Ok(rpk)
+    }
+}
+
+#[wasm_bindgen]
+pub struct DaedalusAddressChecker {
+    wallet: PrivateKey,
+    payload_key: hdpayload::HDKey,
+}
+#[wasm_bindgen]
+impl DaedalusAddressChecker {
+    /// create a new address checker for the given daedalus address
+    pub fn new(wallet: &DaedalusWallet) -> Self {
+        let wallet = wallet.0.clone();
+        let payload_key = hdpayload::HDKey::new(&wallet.0.public());
+        DaedalusAddressChecker {
+            wallet,
+            payload_key,
+        }
+    }
+
+    /// check that we own the given address.
+    ///
+    /// This is only possible like this because some payload is embedded in the
+    /// address that only our wallet can decode. Once decoded we can retrieve
+    /// the associated private key.
+    ///
+    /// The return private key is the key needed to sign the transaction to unlock
+    /// UTxO associated to the address.
+    pub fn check_address(&self, address: &Address) -> Option<PrivateKey> {
+        if let Some(hdpa) = &address.0.attributes.derivation_path.clone() {
+            if let Ok(path) = self.payload_key.decrypt_path(hdpa) {
+                let mut key = self.wallet.clone();
+                for index in path.iter() {
+                    key = key.derive(DerivationScheme::v1(), *index);
+                }
+                return Some(key);
+            }
+        }
+
+        None
     }
 }
 
@@ -589,34 +633,89 @@ impl Coin {
     }
 }
 
+#[wasm_bindgen]
+#[derive(Serialize, Deserialize, PartialEq, Eq, Debug)]
+pub struct TransactionId(tx::TxId);
+impl TransactionId {
+    pub fn to_hex(&self) -> String {
+        format!("{}", self.0)
+    }
+    pub fn from_hex(s: &str) -> Result<TransactionId, JsValue> {
+        use std::str::FromStr;
+        hash::Blake2b256::from_str(s)
+            .map_err(|e| JsValue::from_str(&format! {"{:?}", e}))
+            .map(TransactionId)
+    }
+    fn convert(&self) -> tx::TxId {
+        self.0.clone()
+    }
+}
+
+#[wasm_bindgen]
 #[derive(Serialize, Deserialize, PartialEq, Eq, Debug)]
 pub struct TxoPointer {
-    id: tx::TxId,
+    id: TransactionId,
     index: u32,
+}
+#[wasm_bindgen]
+impl TxoPointer {
+    /// serialize into a JsValue object
+    pub fn to_json(&self) -> Result<JsValue, JsValue> {
+        JsValue::from_serde(self).map_err(|e| JsValue::from_str(&format! {"{:?}", e}))
+    }
+
+    /// retrieve the object from a JsValue.
+    pub fn from_json(value: JsValue) -> Result<TxoPointer, JsValue> {
+        value
+            .into_serde()
+            .map_err(|e| JsValue::from_str(&format! {"{:?}", e}))
+    }
 }
 impl TxoPointer {
     fn convert(&self) -> tx::TxoPointer {
         tx::TxoPointer {
-            id: self.id,
+            id: self.id.convert(),
             index: self.index,
         }
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[wasm_bindgen]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct TxOut {
-    address: address::ExtendedAddr,
+    address: Address,
     value: Coin,
+}
+#[wasm_bindgen]
+impl TxOut {
+    /// serialize into a JsValue object
+    pub fn to_json(&self) -> Result<JsValue, JsValue> {
+        JsValue::from_serde(self).map_err(|e| JsValue::from_str(&format! {"{:?}", e}))
+    }
+
+    /// retrieve the object from a JsValue.
+    pub fn from_json(value: JsValue) -> Result<TxoPointer, JsValue> {
+        value
+            .into_serde()
+            .map_err(|e| JsValue::from_str(&format! {"{:?}", e}))
+    }
 }
 impl TxOut {
     fn convert(&self) -> tx::TxOut {
         tx::TxOut {
-            address: self.address.clone(),
+            address: self.address.0.clone(),
             value: self.value.0,
         }
     }
 }
 
+/// a transaction type, this is not ready for sending to the network. It is only an
+/// intermediate type to use between the transaction builder and the transaction
+/// finalizer. It allows separation of concerns:
+///
+/// 1. build the transaction on one side/thread/machine/...;
+/// 2. sign the transaction on the other/thread/machines/cold-wallet...;
+///
 #[wasm_bindgen]
 pub struct Transaction(tx::Tx);
 #[wasm_bindgen]
@@ -658,38 +757,50 @@ impl SignedTransaction {
     }
 }
 
+/// This is the linear fee algorithm used buy the current cardano blockchain.
+///
+/// However it is possible the linear fee algorithm may change its settings:
+///
+/// It is currently a function `fee(n) = a * x + b`. `a` and `b` can be
+/// re-configured by a protocol update. Users of this object need to be aware
+/// that it may change and that they might need to update its settings.
+///
 #[wasm_bindgen]
 pub struct LinearFeeAlgorithm(fee::LinearFee);
 #[wasm_bindgen]
 impl LinearFeeAlgorithm {
+    /// this is the default mainnet linear fee algorithm. It is also known to work
+    /// with the staging network and the current testnet.
+    ///
     pub fn default() -> LinearFeeAlgorithm {
         LinearFeeAlgorithm(fee::LinearFee::default())
     }
 }
 
+/// This is the Output policy for automatic Input selection.
 #[wasm_bindgen]
 pub struct OutputPolicy(txutils::OutputPolicy);
 #[wasm_bindgen]
 impl OutputPolicy {
+    /// requires to send back all the spare changes to only one given address
     pub fn change_to_one_address(address: Address) -> OutputPolicy {
         OutputPolicy(txutils::OutputPolicy::One(address.0))
     }
 }
 
+/// The transaction builder provides a set of tools to help build
+/// a valid Transaction.
 #[wasm_bindgen]
 pub struct TransactionBuilder(txbuild::TxBuilder);
 #[wasm_bindgen]
 impl TransactionBuilder {
+    /// create a new transaction builder
     #[wasm_bindgen(constructor)]
     pub fn new() -> TransactionBuilder {
         TransactionBuilder(txbuild::TxBuilder::new())
     }
 
-    pub fn add_input(&mut self, input_ptr: &JsValue, value: Coin) -> Result<(), JsValue> {
-        let txo_pointer: TxoPointer = input_ptr
-            .into_serde()
-            .map_err(|e| JsValue::from_str(&format! {"{:?}", e}))?;
-
+    pub fn add_input(&mut self, txo_pointer: &TxoPointer, value: Coin) -> Result<(), JsValue> {
         self.0.add_input(&txo_pointer.convert(), value.0);
         Ok(())
     }
@@ -701,10 +812,7 @@ impl TransactionBuilder {
             .map_err(|e| JsValue::from_str(&format! {"{:?}", e}))
     }
 
-    pub fn add_output(&mut self, output: &JsValue) -> Result<(), JsValue> {
-        let output: TxOut = output
-            .into_serde()
-            .map_err(|e| JsValue::from_str(&format! {"{:?}", e}))?;
+    pub fn add_output(&mut self, output: &TxOut) -> Result<(), JsValue> {
         self.0.add_output_value(&output.convert());
         Ok(())
     }
@@ -720,7 +828,7 @@ impl TransactionBuilder {
                 all_txout
                     .into_iter()
                     .map(|txout| TxOut {
-                        address: txout.address,
+                        address: Address(txout.address),
                         value: Coin(txout.value),
                     })
                     .collect::<Vec<_>>()
@@ -781,6 +889,11 @@ impl TransactionFinalized {
         }
     }
 
+    /// sign the inputs of the transaction (i.e. unlock the funds the input are
+    /// referring to).
+    ///
+    /// The signature must be added one by one in the same order the inputs have
+    /// been added.
     pub fn sign(
         &mut self,
         blockchain_settings: &BlockchainSettings,
