@@ -131,7 +131,7 @@ export const newAccount = (module, wallet, account) => {
  * @returns {*}  - a list of ready to use addresses
  */
 export const generateAddresses = (module, account, type, indices) => {
-    const input = { account, account
+    const input = { account: account
                   , address_type: type
                   , indices: indices
                   };
