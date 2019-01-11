@@ -495,18 +495,18 @@ impl DaedalusAddressChecker {
     ///
     /// The return private key is the key needed to sign the transaction to unlock
     /// UTxO associated to the address.
-    pub fn check_address(&self, address: &Address) -> Result<DaedalusCheckedAddress, JsValue> {
+    pub fn check_address(&self, address: &Address) -> DaedalusCheckedAddress {
         if let Some(hdpa) = &address.0.attributes.derivation_path.clone() {
             if let Ok(path) = self.payload_key.decrypt_path(hdpa) {
                 let mut key = self.wallet.clone();
                 for index in path.iter() {
                     key = key.derive(DerivationScheme::v1(), *index);
                 }
-                return Ok(DaedalusCheckedAddress(Some(key)));
+                return DaedalusCheckedAddress(Some(key));
             }
         }
 
-        Ok(DaedalusCheckedAddress(None))
+        DaedalusCheckedAddress(None)
     }
 }
 
