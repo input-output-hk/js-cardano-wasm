@@ -955,14 +955,14 @@ impl PrivateRedeemKey {
     /// retrieve the private redeeming key from the given bytes (expect 64 bytes)
     pub fn from_bytes(bytes: &[u8]) -> Result<PrivateRedeemKey, JsValue> {
         redeem::PrivateKey::from_slice(bytes)
-            .map_err(|e| JsValue::from_str(&format! {"{:?}", e}))
+            .map_err(|e| JsValue::from_str(&format! {"{}", e}))
             .map(PrivateRedeemKey)
     }
 
     /// retrieve a private key from the given hexadecimal string
     pub fn from_hex(hex: &str) -> Result<PrivateRedeemKey, JsValue> {
         redeem::PrivateKey::from_hex(hex)
-            .map_err(|e| JsValue::from_str(&format! {"{:?}", e}))
+            .map_err(|e| JsValue::from_str(&format! {"{}", e}))
             .map(PrivateRedeemKey)
     }
     /// convert the private key to an hexadecimal string
