@@ -1,54 +1,42 @@
-<meta charset="utf-8"/>
+# Cardano Wallet
 
-# 🦀🕸️ `wasm-pack-template`
+This is a new version of the Cardano Wasm binding for Icarus/Yoroi.
+It exposes everything one needs to be able to build a cardano wallet
+in javascript.
 
-A template for kick starting a Rust and WebAssembly project using
-[`wasm-pack`](https://github.com/rustwasm/wasm-pack).
-
-This template is designed for compiling Rust libraries into WebAssembly and
-publishing the resulting package to NPM.
-
-* Want to use the published NPM package in a Website? [Check out
-  `create-wasm-app`.](https://github.com/rustwasm/create-wasm-app)
-* Want to make a monorepo-style Website without publishing to NPM? Check out
-  [`rust-webpack-template`](https://github.com/rustwasm/rust-webpack-template)
-  and/or
-  [`rust-parcel-template`](https://github.com/rustwasm/rust-parcel-template).
-
-## 🔋 Batteries Included
-
-* [`wasm-bindgen`](https://github.com/rustwasm/wasm-bindgen) for communicating
-  between WebAssembly and JavaScript.
-* [`console_error_panic_hook`](https://github.com/rustwasm/console_error_panic_hook)
-  for logging panic messages to the developer console.
-* [`wee_alloc`](https://github.com/rustwasm/wee_alloc), an allocator optimized
-  for small code size.
-
-## 🚴 Usage
-
-### 🐑 Use `cargo generate` to Clone this Template
-
-[Learn more about `cargo generate` here.](https://github.com/ashleygwilliams/cargo-generate)
+# How to install
 
 ```
-cargo generate --git https://github.com/rustwasm/wasm-pack-template.git --name my-project
-cd my-project
+npm i --save cardano-wallet
 ```
 
-### 🛠️ Build with `wasm-pack build`
+# How to use
 
-```
-wasm-pack build
-```
+```js
+import * as Cardano from "hello-wasm-pack";
 
-### 🔬 Test in Headless Browsers with `wasm-pack test`
+Cardano
+  .then(Cardano => {
+    const MNEMONICS = "crowd captain hungry tray powder motor coast oppose month shed parent mystery torch resemble index";
+    const PASSWORD = "Cardano Rust for the winners!";
 
-```
-wasm-pack test --headless --firefox
-```
+    // to connect the wallet to mainnet
+    let settings = Cardano.BlockchainSettings.mainnet();
 
-### 🎁 Publish to NPM with `wasm-pack publish`
+    // recover the entropy
+    let entropy = Cardano.Entropy.from_english_mnemonics(MNEMONICS);
+    // recover the wallet
+    let wallet = Cardano.Bip44RootPrivateKey.recover(entropy, PASSWORD);
 
-```
-wasm-pack publish
+    // create a wallet account
+    let account = wallet.bip44_account(Wallet.AccountIndex.new(0 | 0x80000000));
+    let account_public = account.public();
+
+    // create an address
+    let key_pub = account_public.address_key(false, Wallet.AddressKeyIndex.new(0));
+    let address = key_pub.bootstrap_era_address(settings);
+
+    console.log("Address m/bip44/ada/'0/0/0", address.to_base58());
+  })
+  .catch(console.error);
 ```
