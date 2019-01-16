@@ -1,34 +1,37 @@
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
-extern crate serde_json;
-extern crate cryptoxide;
 extern crate cardano;
+extern crate cryptoxide;
+extern crate serde_json;
 #[macro_use]
 extern crate cbor_event;
 
-use self::cryptoxide::hmac::{Hmac};
+use self::cryptoxide::blake2b::Blake2b;
+use self::cryptoxide::chacha20poly1305::ChaCha20Poly1305;
+use self::cryptoxide::digest::Digest;
+use self::cryptoxide::hmac::Hmac;
+use self::cryptoxide::pbkdf2::pbkdf2;
 use self::cryptoxide::sha2::{Sha256, Sha512};
-use self::cryptoxide::pbkdf2::{pbkdf2};
-use self::cryptoxide::blake2b::{Blake2b};
-use self::cryptoxide::digest::{Digest};
-use self::cryptoxide::chacha20poly1305::{ChaCha20Poly1305};
 
+use self::cardano::address;
+use self::cardano::bip::bip39;
+use self::cardano::config::Config;
+use self::cardano::hdpayload;
 use self::cardano::hdwallet;
 use self::cardano::paperwallet;
-use self::cardano::address;
-use self::cardano::hdpayload;
-use self::cardano::{util::{hex}, tx, fee, coin, txutils};
-use self::cardano::config::{Config};
-use self::cardano::wallet::{self, bip44, rindex, scheme::{Wallet, SelectionPolicy}};
-use self::cardano::bip::{bip39};
+use self::cardano::wallet::{
+    self, bip44, rindex,
+    scheme::{SelectionPolicy, Wallet},
+};
+use self::cardano::{coin, fee, tx, txutils, util::hex};
 
-use self::cardano::util::try_from_slice::{TryFromSlice};
+use self::cardano::util::try_from_slice::TryFromSlice;
 
-use std::{mem, result, string, convert, fmt};
 use std::ffi::{CStr, CString};
-use std::os::raw::{c_uint, c_uchar, c_char, c_void};
 use std::iter::repeat;
+use std::os::raw::{c_char, c_uchar, c_uint, c_void};
+use std::{convert, fmt, mem, result, string};
 //use std::slice::{from_raw_parts};
 
 // In order to work with the memory we expose (de)allocation methods
@@ -42,7 +45,7 @@ pub extern "C" fn alloc(size: usize) -> *mut c_void {
 
 #[no_mangle]
 pub extern "C" fn dealloc(ptr: *mut c_void, cap: usize) {
-    unsafe  {
+    unsafe {
         let _buf = Vec::from_raw_parts(ptr, 0, cap);
     }
 }
@@ -55,9 +58,13 @@ pub extern "C" fn dealloc_str(ptr: *mut c_char) {
 }
 
 #[no_mangle]
-pub extern "C" fn pbkdf2_sha256(password: *mut c_char, salt: *mut c_char, iters: u32, output: u32) -> *mut c_char {
+pub extern "C" fn pbkdf2_sha256(
+    password: *mut c_char,
+    salt: *mut c_char,
+    iters: u32,
+    output: u32,
+) -> *mut c_char {
     unsafe {
-
         let salt = CStr::from_ptr(salt);
         let password = CStr::from_ptr(password);
 
@@ -73,16 +80,16 @@ pub extern "C" fn pbkdf2_sha256(password: *mut c_char, salt: *mut c_char, iters:
 }
 
 unsafe fn read_data(data_ptr: *const c_uchar, sz: usize) -> Vec<u8> {
-        let data_slice = std::slice::from_raw_parts(data_ptr, sz);
-        let mut data = Vec::with_capacity(sz);
-        data.extend_from_slice(data_slice);
-        data
+    let data_slice = std::slice::from_raw_parts(data_ptr, sz);
+    let mut data = Vec::with_capacity(sz);
+    data.extend_from_slice(data_slice);
+    data
 }
 
 unsafe fn write_data(data: &[u8], data_ptr: *mut c_uchar) {
-        let sz = data.len();
-        let out = std::slice::from_raw_parts_mut(data_ptr, sz);
-        out[0..sz].clone_from_slice(data)
+    let sz = data.len();
+    let out = std::slice::from_raw_parts_mut(data_ptr, sz);
+    out[0..sz].clone_from_slice(data)
 }
 
 unsafe fn read_data_u32(data_ptr: *const c_uint, sz: usize) -> Vec<u32> {
@@ -93,66 +100,65 @@ unsafe fn read_data_u32(data_ptr: *const c_uint, sz: usize) -> Vec<u32> {
 }
 
 unsafe fn write_data_u32(data: &[u32], data_ptr: *mut c_uint) {
-        let sz = data.len();
-        let out = std::slice::from_raw_parts_mut(data_ptr, sz);
-        out[0..sz].clone_from_slice(data)
+    let sz = data.len();
+    let out = std::slice::from_raw_parts_mut(data_ptr, sz);
+    out[0..sz].clone_from_slice(data)
 }
 
 unsafe fn read_xprv(xprv_ptr: *const c_uchar) -> hdwallet::XPrv {
-        let xprv_slice = std::slice::from_raw_parts(xprv_ptr, hdwallet::XPRV_SIZE);
-        let mut xprv_bytes = [0;hdwallet::XPRV_SIZE];
-        xprv_bytes[..].clone_from_slice(xprv_slice);
-        hdwallet::XPrv::from_bytes_verified(xprv_bytes).unwrap()
+    let xprv_slice = std::slice::from_raw_parts(xprv_ptr, hdwallet::XPRV_SIZE);
+    let mut xprv_bytes = [0; hdwallet::XPRV_SIZE];
+    xprv_bytes[..].clone_from_slice(xprv_slice);
+    hdwallet::XPrv::from_bytes_verified(xprv_bytes).unwrap()
 }
 
 unsafe fn write_xprv(xprv: &hdwallet::XPrv, xprv_ptr: *mut c_uchar) {
-        let out = std::slice::from_raw_parts_mut(xprv_ptr, hdwallet::XPRV_SIZE);
-        out[0..hdwallet::XPRV_SIZE].clone_from_slice(xprv.as_ref());
+    let out = std::slice::from_raw_parts_mut(xprv_ptr, hdwallet::XPRV_SIZE);
+    out[0..hdwallet::XPRV_SIZE].clone_from_slice(xprv.as_ref());
 }
 
 unsafe fn read_xpub(xpub_ptr: *const c_uchar) -> hdwallet::XPub {
-        let xpub_slice = std::slice::from_raw_parts(xpub_ptr, hdwallet::XPUB_SIZE);
-        hdwallet::XPub::from_slice(xpub_slice).unwrap()
+    let xpub_slice = std::slice::from_raw_parts(xpub_ptr, hdwallet::XPUB_SIZE);
+    hdwallet::XPub::from_slice(xpub_slice).unwrap()
 }
 
 unsafe fn write_xpub(xpub: &hdwallet::XPub, xpub_ptr: *mut c_uchar) {
-        let out = std::slice::from_raw_parts_mut(xpub_ptr, hdwallet::XPUB_SIZE);
-        out[0..hdwallet::XPUB_SIZE].clone_from_slice(xpub.as_ref());
+    let out = std::slice::from_raw_parts_mut(xpub_ptr, hdwallet::XPUB_SIZE);
+    out[0..hdwallet::XPUB_SIZE].clone_from_slice(xpub.as_ref());
 }
 
 unsafe fn read_signature<T>(sig_ptr: *const c_uchar) -> hdwallet::Signature<T> {
-        let signature_slice = std::slice::from_raw_parts(sig_ptr, hdwallet::SIGNATURE_SIZE);
-        hdwallet::Signature::from_slice(signature_slice).unwrap()
+    let signature_slice = std::slice::from_raw_parts(sig_ptr, hdwallet::SIGNATURE_SIZE);
+    hdwallet::Signature::from_slice(signature_slice).unwrap()
 }
 
 unsafe fn write_signature<T>(signature: &hdwallet::Signature<T>, out_ptr: *mut c_uchar) {
-        let out = std::slice::from_raw_parts_mut(out_ptr, hdwallet::SIGNATURE_SIZE);
-        out[0..hdwallet::SIGNATURE_SIZE].clone_from_slice(signature.as_ref());
+    let out = std::slice::from_raw_parts_mut(out_ptr, hdwallet::SIGNATURE_SIZE);
+    out[0..hdwallet::SIGNATURE_SIZE].clone_from_slice(signature.as_ref());
 }
 
 unsafe fn read_seed(seed_ptr: *const c_uchar) -> hdwallet::Seed {
-        let seed_slice = std::slice::from_raw_parts(seed_ptr, hdwallet::SEED_SIZE);
-        hdwallet::Seed::from_slice(seed_slice).unwrap()
+    let seed_slice = std::slice::from_raw_parts(seed_ptr, hdwallet::SEED_SIZE);
+    hdwallet::Seed::from_slice(seed_slice).unwrap()
 }
 
 #[no_mangle]
-pub extern "C" fn wallet_from_enhanced_entropy( entropy_ptr: *const c_uchar
-                                              , entropy_size: usize
-                                              , password_ptr: *const c_uchar
-                                              , password_size: usize
-                                              , out: *mut c_uchar
-                                              )
-    -> usize
-{
+pub extern "C" fn wallet_from_enhanced_entropy(
+    entropy_ptr: *const c_uchar,
+    entropy_size: usize,
+    password_ptr: *const c_uchar,
+    password_size: usize,
+    out: *mut c_uchar,
+) -> usize {
     match entropy_size {
-        16 | 20 | 24 | 28 | 32 => {},
-        _ => return 1
+        16 | 20 | 24 | 28 | 32 => {}
+        _ => return 1,
     }
-    let entropy  = unsafe { read_data(entropy_ptr, entropy_size) };
+    let entropy = unsafe { read_data(entropy_ptr, entropy_size) };
     let password = unsafe { read_data(password_ptr, password_size) };
     // it is okay to unwrap here, we already checked the size
-    let entropy  = bip39::Entropy::from_slice(&entropy).unwrap();
-    let mut bytes = [0;hdwallet::XPRV_SIZE];
+    let entropy = bip39::Entropy::from_slice(&entropy).unwrap();
+    let mut bytes = [0; hdwallet::XPRV_SIZE];
     wallet::keygen::generate_seed(&entropy, &password, &mut bytes);
     let xprv = hdwallet::XPrv::normalize_bytes(bytes);
     unsafe { write_xprv(&xprv, out) };
@@ -189,24 +195,41 @@ pub extern "C" fn wallet_derive_private(xprv_ptr: *const c_uchar, index: u32, ou
 }
 
 #[no_mangle]
-pub extern "C" fn wallet_derive_public(xpub_ptr: *const c_uchar, index: u32, out: *mut c_uchar) -> bool {
+pub extern "C" fn wallet_derive_public(
+    xpub_ptr: *const c_uchar,
+    index: u32,
+    out: *mut c_uchar,
+) -> bool {
     let xpub = unsafe { read_xpub(xpub_ptr) };
     match xpub.derive(hdwallet::DerivationScheme::V2, index) {
-        Ok(child) => { unsafe { write_xpub(&child, out) }; true }
-        Err(_)    => { false }
+        Ok(child) => {
+            unsafe { write_xpub(&child, out) };
+            true
+        }
+        Err(_) => false,
     }
 }
 
 #[no_mangle]
-pub extern "C" fn wallet_sign(xprv_ptr: *const c_uchar, msg_ptr: *const c_uchar, msg_sz: usize, out: *mut c_uchar) {
+pub extern "C" fn wallet_sign(
+    xprv_ptr: *const c_uchar,
+    msg_ptr: *const c_uchar,
+    msg_sz: usize,
+    out: *mut c_uchar,
+) {
     let xprv = unsafe { read_xprv(xprv_ptr) };
     let msg = unsafe { read_data(msg_ptr, msg_sz) };
-    let signature : hdwallet::Signature<Vec<u8>> = xprv.sign(&msg[..]);
+    let signature: hdwallet::Signature<Vec<u8>> = xprv.sign(&msg[..]);
     unsafe { write_signature(&signature, out) }
 }
 
 #[no_mangle]
-pub extern "C" fn wallet_verify(xpub_ptr: *const c_uchar, msg_ptr: *const c_uchar, msg_sz: usize, sig_ptr: *const c_uchar) -> bool {
+pub extern "C" fn wallet_verify(
+    xpub_ptr: *const c_uchar,
+    msg_ptr: *const c_uchar,
+    msg_sz: usize,
+    sig_ptr: *const c_uchar,
+) -> bool {
     let xpub = unsafe { read_xpub(xpub_ptr) };
     let msg = unsafe { read_data(msg_ptr, msg_sz) };
     let signature = unsafe { read_signature::<Vec<u8>>(sig_ptr) };
@@ -214,7 +237,14 @@ pub extern "C" fn wallet_verify(xpub_ptr: *const c_uchar, msg_ptr: *const c_ucha
 }
 
 #[no_mangle]
-pub extern "C" fn paper_scramble(iv_ptr: *const c_uchar, pass_ptr: *const c_uchar, pass_sz: usize, input_ptr: *const c_uchar, input_sz: usize, out: *mut c_uchar) {
+pub extern "C" fn paper_scramble(
+    iv_ptr: *const c_uchar,
+    pass_ptr: *const c_uchar,
+    pass_sz: usize,
+    input_ptr: *const c_uchar,
+    input_sz: usize,
+    out: *mut c_uchar,
+) {
     let iv = unsafe { read_data(iv_ptr, paperwallet::IV_SIZE) };
     let pass = unsafe { read_data(pass_ptr, pass_sz) };
     let input = unsafe { read_data(input_ptr, input_sz) };
@@ -223,7 +253,13 @@ pub extern "C" fn paper_scramble(iv_ptr: *const c_uchar, pass_ptr: *const c_ucha
 }
 
 #[no_mangle]
-pub extern "C" fn paper_unscramble(pass_ptr: *const c_uchar, pass_sz: usize, input_ptr: *const c_uchar, input_sz: usize, out: *mut c_uchar) {
+pub extern "C" fn paper_unscramble(
+    pass_ptr: *const c_uchar,
+    pass_sz: usize,
+    input_ptr: *const c_uchar,
+    input_sz: usize,
+    out: *mut c_uchar,
+) {
     let pass = unsafe { read_data(pass_ptr, pass_sz) };
     let input = unsafe { read_data(input_ptr, input_sz) };
     let output = paperwallet::unscramble(&pass[..], &input[..]);
@@ -233,15 +269,24 @@ pub extern "C" fn paper_unscramble(pass_ptr: *const c_uchar, pass_sz: usize, inp
 #[no_mangle]
 pub extern "C" fn blake2b_256(msg_ptr: *const c_uchar, msg_sz: usize, out: *mut c_uchar) {
     let mut b2b = Blake2b::new(32);
-    let mut outv = [0;32];
+    let mut outv = [0; 32];
     let msg = unsafe { read_data(msg_ptr, msg_sz) };
     b2b.input(&msg);
     b2b.result(&mut outv);
     unsafe { write_data(&outv, out) }
 }
 
+fn default_network_magic() -> cardano::config::NetworkMagic {
+    cardano::config::ProtocolMagic::default().into()
+}
+
 #[no_mangle]
-pub extern "C" fn wallet_public_to_address(xpub_ptr: *const c_uchar, payload_ptr: *const c_uchar, payload_sz: usize, out: *mut c_uchar) -> u32 {
+pub extern "C" fn wallet_public_to_address(
+    xpub_ptr: *const c_uchar,
+    payload_ptr: *const c_uchar,
+    payload_sz: usize,
+    out: *mut c_uchar,
+) -> u32 {
     let xpub = unsafe { read_xpub(xpub_ptr) };
     let payload = unsafe { read_data(payload_ptr, payload_sz) };
 
@@ -249,7 +294,7 @@ pub extern "C" fn wallet_public_to_address(xpub_ptr: *const c_uchar, payload_ptr
 
     let addr_type = address::AddrType::ATPubKey;
     let sd = address::SpendingData::PubKeyASD(xpub.clone());
-    let attrs = address::Attributes::new_bootstrap_era(Some(hdap));
+    let attrs = address::Attributes::new_bootstrap_era(Some(hdap), default_network_magic());
     let ea = address::ExtendedAddr::new(addr_type, sd, attrs);
 
     let ea_bytes = cbor!(ea).unwrap();
@@ -260,19 +305,21 @@ pub extern "C" fn wallet_public_to_address(xpub_ptr: *const c_uchar, payload_ptr
 }
 
 #[no_mangle]
-pub extern "C" fn wallet_address_get_payload(addr_ptr: *const c_uchar, addr_sz: usize, out: *mut c_uchar) -> u32 {
+pub extern "C" fn wallet_address_get_payload(
+    addr_ptr: *const c_uchar,
+    addr_sz: usize,
+    out: *mut c_uchar,
+) -> u32 {
     let addr_bytes = unsafe { read_data(addr_ptr, addr_sz) };
     match address::ExtendedAddr::try_from_slice(&addr_bytes).ok() {
         None => (-1i32) as u32,
-        Some(r)  => {
-            match r.attributes.derivation_path {
-                None        => 0,
-                Some(dpath) => {
-                    unsafe { write_data(dpath.as_ref(), out) };
-                    dpath.as_ref().len() as u32
-                }
+        Some(r) => match r.attributes.derivation_path {
+            None => 0,
+            Some(dpath) => {
+                unsafe { write_data(dpath.as_ref(), out) };
+                dpath.as_ref().len() as u32
             }
-        }
+        },
     }
 }
 
@@ -280,11 +327,18 @@ pub extern "C" fn wallet_address_get_payload(addr_ptr: *const c_uchar, addr_sz: 
 pub extern "C" fn wallet_payload_initiate(xpub_ptr: *const c_uchar, out: *mut c_uchar) {
     let xpub = unsafe { read_xpub(xpub_ptr) };
     let hdkey = hdpayload::HDKey::new(&xpub);
-    unsafe { write_data(hdkey.as_ref(), out); }
+    unsafe {
+        write_data(hdkey.as_ref(), out);
+    }
 }
 
 #[no_mangle]
-pub extern "C" fn wallet_payload_encrypt(key_ptr: *const c_uchar, path_array: *const c_uint, path_sz: usize, out: *mut c_uchar) -> u32 {
+pub extern "C" fn wallet_payload_encrypt(
+    key_ptr: *const c_uchar,
+    path_array: *const c_uint,
+    path_sz: usize,
+    out: *mut c_uchar,
+) -> u32 {
     let key_bytes = unsafe { read_data(key_ptr, hdpayload::HDKEY_SIZE) };
     let path_vec = unsafe { read_data_u32(path_array, path_sz) };
     let hdkey = hdpayload::HDKey::from_slice(&key_bytes).unwrap();
@@ -298,7 +352,12 @@ pub extern "C" fn wallet_payload_encrypt(key_ptr: *const c_uchar, path_array: *c
 }
 
 #[no_mangle]
-pub extern "C" fn wallet_payload_decrypt(key_ptr: *const c_uchar, payload_ptr: *const c_uchar, payload_sz: usize, out: *mut c_uint) -> u32 {
+pub extern "C" fn wallet_payload_decrypt(
+    key_ptr: *const c_uchar,
+    payload_ptr: *const c_uchar,
+    payload_sz: usize,
+    out: *mut c_uint,
+) -> u32 {
     let key_bytes = unsafe { read_data(key_ptr, hdpayload::HDKEY_SIZE) };
     let payload_bytes = unsafe { read_data(payload_ptr, payload_sz) };
 
@@ -306,7 +365,7 @@ pub extern "C" fn wallet_payload_decrypt(key_ptr: *const c_uchar, payload_ptr: *
     let payload = hdpayload::HDAddressPayload::from_bytes(&payload_bytes);
 
     match hdkey.decrypt_path(&payload) {
-        Err(_)   => 0xffffffff,
+        Err(_) => 0xffffffff,
         Ok(path) => {
             let v = path.as_ref();
             unsafe { write_data_u32(v, out) };
@@ -316,7 +375,11 @@ pub extern "C" fn wallet_payload_decrypt(key_ptr: *const c_uchar, payload_ptr: *
 }
 
 #[no_mangle]
-pub extern "C" fn wallet_txin_create(txid_ptr: *const c_uchar, index: u32, out: *mut c_uchar) -> u32 {
+pub extern "C" fn wallet_txin_create(
+    txid_ptr: *const c_uchar,
+    index: u32,
+    out: *mut c_uchar,
+) -> u32 {
     let txid_bytes = unsafe { read_data(txid_ptr, tx::TxId::HASH_SIZE) };
 
     let txid = tx::TxId::try_from_slice(&txid_bytes).unwrap();
@@ -329,7 +392,12 @@ pub extern "C" fn wallet_txin_create(txid_ptr: *const c_uchar, index: u32, out: 
 }
 
 #[no_mangle]
-pub extern "C" fn wallet_txout_create(ea_ptr: *const c_uchar, ea_sz: usize, amount: u32, out: *mut c_uchar) -> u32 {
+pub extern "C" fn wallet_txout_create(
+    ea_ptr: *const c_uchar,
+    ea_sz: usize,
+    amount: u32,
+    out: *mut c_uchar,
+) -> u32 {
     let ea_bytes = unsafe { read_data(ea_ptr, ea_sz) };
 
     let ea = address::ExtendedAddr::try_from_slice(&ea_bytes).unwrap();
@@ -351,12 +419,20 @@ pub extern "C" fn wallet_tx_new(out: *mut c_uchar) -> u32 {
 }
 
 #[no_mangle]
-pub extern "C" fn wallet_tx_add_txin(tx_ptr: *const c_uchar, tx_sz: usize, txin_ptr: *const c_uchar, txin_sz: usize, out: *mut c_uchar) -> u32 {
+pub extern "C" fn wallet_tx_add_txin(
+    tx_ptr: *const c_uchar,
+    tx_sz: usize,
+    txin_ptr: *const c_uchar,
+    txin_sz: usize,
+    out: *mut c_uchar,
+) -> u32 {
     let tx_bytes = unsafe { read_data(tx_ptr, tx_sz) };
     let txin_bytes = unsafe { read_data(txin_ptr, txin_sz) };
 
-    let mut tx : tx::Tx = cbor_event::de::RawCbor::from(&tx_bytes).deserialize().unwrap();
-    let txin = cbor_event::de::RawCbor::from(&txin_bytes).deserialize().unwrap();
+    let mut deserialiser = cbor_event::de::Deserializer::from(tx_bytes.as_slice());
+    let mut tx: tx::Tx = deserialiser.deserialize_complete().unwrap();
+    deserialiser = cbor_event::de::Deserializer::from(txin_bytes.as_slice());
+    let txin = deserialiser.deserialize_complete().unwrap();
 
     tx.add_input(txin);
 
@@ -366,12 +442,20 @@ pub extern "C" fn wallet_tx_add_txin(tx_ptr: *const c_uchar, tx_sz: usize, txin_
 }
 
 #[no_mangle]
-pub extern "C" fn wallet_tx_add_txout(tx_ptr: *const c_uchar, tx_sz: usize, txout_ptr: *const c_uchar, txout_sz: usize, out: *mut c_uchar) -> u32 {
+pub extern "C" fn wallet_tx_add_txout(
+    tx_ptr: *const c_uchar,
+    tx_sz: usize,
+    txout_ptr: *const c_uchar,
+    txout_sz: usize,
+    out: *mut c_uchar,
+) -> u32 {
     let tx_bytes = unsafe { read_data(tx_ptr, tx_sz) };
     let txout_bytes = unsafe { read_data(txout_ptr, txout_sz) };
 
-    let mut tx : tx::Tx = cbor_event::de::RawCbor::from(&tx_bytes).deserialize().unwrap();
-    let txout = cbor_event::de::RawCbor::from(&txout_bytes).deserialize().unwrap();
+    let mut deserialiser = cbor_event::de::Deserializer::from(tx_bytes.as_slice());
+    let mut tx: tx::Tx = deserialiser.deserialize_complete().unwrap();
+    deserialiser = cbor_event::de::Deserializer::from(txout_bytes.as_slice());
+    let txout = deserialiser.deserialize_complete().unwrap();
 
     tx.add_output(txout);
 
@@ -381,53 +465,80 @@ pub extern "C" fn wallet_tx_add_txout(tx_ptr: *const c_uchar, tx_sz: usize, txou
 }
 
 #[no_mangle]
-pub extern "C" fn wallet_tx_sign(cfg_ptr: *const c_uchar, cfg_size: usize, xprv_ptr: *const c_uchar, tx_ptr: *const c_uchar, tx_sz: usize, out: *mut c_uchar) {
-    let cfg_bytes : Vec<u8> = unsafe { read_data(cfg_ptr, cfg_size) };
+pub extern "C" fn wallet_tx_sign(
+    cfg_ptr: *const c_uchar,
+    cfg_size: usize,
+    xprv_ptr: *const c_uchar,
+    tx_ptr: *const c_uchar,
+    tx_sz: usize,
+    out: *mut c_uchar,
+) {
+    let cfg_bytes: Vec<u8> = unsafe { read_data(cfg_ptr, cfg_size) };
     let cfg_str = String::from_utf8(cfg_bytes).unwrap();
-    let cfg : Config = serde_json::from_str(cfg_str.as_str()).unwrap();
+    let cfg: Config = serde_json::from_str(cfg_str.as_str()).unwrap();
     let xprv = unsafe { read_xprv(xprv_ptr) };
     let tx_bytes = unsafe { read_data(tx_ptr, tx_sz) };
 
-    let tx : tx::Tx = cbor_event::de::RawCbor::from(&tx_bytes).deserialize().unwrap();
+    let mut deserialiser = cbor_event::de::Deserializer::from(tx_bytes.as_slice());
+    let tx: tx::Tx = deserialiser.deserialize_complete().unwrap();
 
     let txinwitness = tx::TxInWitness::new(cfg.protocol_magic, &xprv, &tx.id());
 
     let signature = match txinwitness {
         tx::TxInWitness::PkWitness(_, sig) => sig,
-        _ => unimplemented!() // this should never happen as we are signing for the tx anyway
+        _ => unimplemented!(), // this should never happen as we are signing for the tx anyway
     };
     unsafe { write_signature(&signature, out) }
 }
 
 #[no_mangle]
-pub extern "C" fn wallet_tx_verify(cfg_ptr: *const c_uchar, cfg_size: usize, xpub_ptr: *const c_uchar, tx_ptr: *const c_uchar, tx_sz: usize, sig_ptr: *const c_uchar) -> i32 {
-    let cfg_bytes : Vec<u8> = unsafe { read_data(cfg_ptr, cfg_size) };
+pub extern "C" fn wallet_tx_verify(
+    cfg_ptr: *const c_uchar,
+    cfg_size: usize,
+    xpub_ptr: *const c_uchar,
+    tx_ptr: *const c_uchar,
+    tx_sz: usize,
+    sig_ptr: *const c_uchar,
+) -> i32 {
+    let cfg_bytes: Vec<u8> = unsafe { read_data(cfg_ptr, cfg_size) };
     let cfg_str = String::from_utf8(cfg_bytes).unwrap();
-    let cfg : Config = serde_json::from_str(cfg_str.as_str()).unwrap();
+    let cfg: Config = serde_json::from_str(cfg_str.as_str()).unwrap();
     let xpub = unsafe { read_xpub(xpub_ptr) };
     let signature = unsafe { read_signature(sig_ptr) };
 
     let tx_bytes = unsafe { read_data(tx_ptr, tx_sz) };
-    let tx : tx::Tx = cbor_event::de::RawCbor::from(&tx_bytes).deserialize().unwrap();
+
+    let mut deserialiser = cbor_event::de::Deserializer::from(tx_bytes.as_slice());
+    let tx: tx::Tx = deserialiser.deserialize_complete().unwrap();
 
     let txinwitness = tx::TxInWitness::PkWitness(xpub, signature);
 
-    if txinwitness.verify_tx(cfg.protocol_magic, &tx) { 0 } else { -1 }
+    if txinwitness.verify_tx(cfg.protocol_magic, &tx) {
+        0
+    } else {
+        -1
+    }
 }
 
 mod jrpc {
-    use serde::{Serialize};
+    use serde::Serialize;
     use serde_json;
-    use std::os::raw::{c_uchar};
+    use std::os::raw::c_uchar;
 
     #[derive(Serialize, Deserialize, PartialEq, Eq, Debug, Clone)]
     struct Error {
         failed: bool,
         loc: String,
-        msg: String
+        msg: String,
     }
     impl Error {
-        fn new(loc: String, msg: String) -> Self { Error { failed: true, loc: loc, msg: msg } }
+        fn new(loc: String, msg: String) -> Self {
+            Error {
+                failed: true,
+                loc: loc,
+                msg: msg,
+            }
+        }
     }
 
     pub fn fail(output_ptr: *mut c_uchar, file: &str, line: u32, msg: String) -> i32 {
@@ -443,14 +554,20 @@ mod jrpc {
     #[derive(Serialize, Deserialize, PartialEq, Eq, Debug, Clone)]
     struct Success<T> {
         failed: bool,
-        result: T
+        result: T,
     }
     impl<T: Serialize> Success<T> {
-        fn new(result: T) -> Self { Success { failed: false, result: result } }
+        fn new(result: T) -> Self {
+            Success {
+                failed: false,
+                result: result,
+            }
+        }
     }
 
     pub fn ok<T>(output_ptr: *mut c_uchar, result: T) -> i32
-        where T: Serialize
+    where
+        T: Serialize,
     {
         let succ = Success::new(result);
 
@@ -482,20 +599,26 @@ macro_rules! jrpc_fail {
 }
 
 macro_rules! jrpc_ok {
-    ($output_ptr:ident, $result:expr) => ({
+    ($output_ptr:ident, $result:expr) => {{
         jrpc::ok($output_ptr, $result)
-    });
-    ($output_ptr:ident, $result:expr,) => ({
+    }};
+    ($output_ptr:ident, $result:expr,) => {{
         jrpc_ok!($output_ptr, $result)
-    });
+    }};
 }
 
 macro_rules! jrpc_try {
-    ($output_ptr:ident, $expr:expr) => (match $expr {
-        Ok(val) => val,
-        Err(err) => { return jrpc_fail!($output_ptr, "{:?}", err); }
-    });
-    ($output_ptr:ident, $expr:expr,) => (jrpc_try!($output_ptr, $expr));
+    ($output_ptr:ident, $expr:expr) => {
+        match $expr {
+            Ok(val) => val,
+            Err(err) => {
+                return jrpc_fail!($output_ptr, "{:?}", err);
+            }
+        }
+    };
+    ($output_ptr:ident, $expr:expr,) => {
+        jrpc_try!($output_ptr, $expr)
+    };
 }
 
 #[derive(Debug)]
@@ -508,41 +631,53 @@ enum Error {
     ErrorRindex(rindex::Error),
 }
 impl convert::From<string::FromUtf8Error> for Error {
-    fn from(j: string::FromUtf8Error) -> Self { Error::ErrorUtf8(j) }
+    fn from(j: string::FromUtf8Error) -> Self {
+        Error::ErrorUtf8(j)
+    }
 }
 impl convert::From<serde_json::error::Error> for Error {
-    fn from(j: serde_json::error::Error) -> Self { Error::ErrorJSON(j) }
+    fn from(j: serde_json::error::Error) -> Self {
+        Error::ErrorJSON(j)
+    }
 }
 impl convert::From<cbor_event::Error> for Error {
-    fn from(j: cbor_event::Error) -> Self { Error::ErrorCBOR(j) }
+    fn from(j: cbor_event::Error) -> Self {
+        Error::ErrorCBOR(j)
+    }
 }
 impl convert::From<fee::Error> for Error {
-    fn from(j: fee::Error) -> Self { Error::ErrorFEE(j) }
+    fn from(j: fee::Error) -> Self {
+        Error::ErrorFEE(j)
+    }
 }
 impl convert::From<bip39::Error> for Error {
-    fn from(j: bip39::Error) -> Self { Error::ErrorBip39(j) }
+    fn from(j: bip39::Error) -> Self {
+        Error::ErrorBip39(j)
+    }
 }
 impl convert::From<rindex::Error> for Error {
-    fn from(j: rindex::Error) -> Self { Error::ErrorRindex(j) }
+    fn from(j: rindex::Error) -> Self {
+        Error::ErrorRindex(j)
+    }
 }
 
 type Result<T> = result::Result<T, Error>;
 
 fn input_string_(input_ptr: *const c_uchar, input_sz: usize) -> Result<String> {
-    let input_bytes : Vec<u8> = unsafe { read_data(input_ptr, input_sz) };
+    let input_bytes: Vec<u8> = unsafe { read_data(input_ptr, input_sz) };
     let input = String::from_utf8(input_bytes)?;
 
     Ok(input)
 }
 
 macro_rules! input_json {
-    ($output_ptr:ident, $input_ptr:ident, $input_sz:ident) => ({
+    ($output_ptr:ident, $input_ptr:ident, $input_sz:ident) => {{
         let input = jrpc_try!($output_ptr, input_string_($input_ptr, $input_sz));
         jrpc_try!($output_ptr, serde_json::from_str(input.as_str()))
-    });
-    ($output_ptr:ident, $input_ptr:ident, $input_sz:ident,) => ({
+    }};
+    ($output_ptr:ident, $input_ptr:ident, $input_sz:ident,) => {{
         input_json!($output_ptr, $input_ptr, $input_sz)
-    });
+    }};
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -556,15 +691,16 @@ pub struct Bip44Wallet {
 impl Bip44Wallet {
     fn to_wallet(&self) -> bip44::Wallet {
         let root_key = bip44::RootLevel::from(self.root_cached_key.clone());
-        bip44::Wallet::from_cached_key(
-            root_key,
-            self.derivation_scheme
-        )
+        bip44::Wallet::from_cached_key(root_key, self.derivation_scheme)
     }
 }
 
 #[no_mangle]
-pub extern "C" fn xwallet_create(input_ptr: *const c_uchar, input_sz: usize, output_ptr: *mut c_uchar) -> i32 {
+pub extern "C" fn xwallet_create(
+    input_ptr: *const c_uchar,
+    input_sz: usize,
+    output_ptr: *mut c_uchar,
+) -> i32 {
     let seed = input_json!(output_ptr, input_ptr, input_sz);
 
     let derivation_scheme = hdwallet::DerivationScheme::V2;
@@ -580,14 +716,17 @@ pub extern "C" fn xwallet_create(input_ptr: *const c_uchar, input_sz: usize, out
         root_cached_key: root_key.clone(),
         config: config,
         selection_policy: selection_policy,
-        derivation_scheme: derivation_scheme
+        derivation_scheme: derivation_scheme,
     };
 
     jrpc_ok!(output_ptr, wallet)
 }
 
 #[no_mangle]
-pub extern "C" fn xwallet_from_master_key(input_ptr: *const c_uchar, output_ptr: *mut c_uchar) -> i32 {
+pub extern "C" fn xwallet_from_master_key(
+    input_ptr: *const c_uchar,
+    output_ptr: *mut c_uchar,
+) -> i32 {
     let xprv = unsafe { read_xprv(input_ptr) };
 
     let derivation_scheme = hdwallet::DerivationScheme::V2;
@@ -602,7 +741,7 @@ pub extern "C" fn xwallet_from_master_key(input_ptr: *const c_uchar, output_ptr:
         root_cached_key: root_key.clone(),
         config: config,
         selection_policy: selection_policy,
-        derivation_scheme: derivation_scheme
+        derivation_scheme: derivation_scheme,
     };
 
     jrpc_ok!(output_ptr, wallet)
@@ -619,48 +758,51 @@ pub struct DaedalusWallet {
 impl DaedalusWallet {
     pub fn to_wallet(&self) -> rindex::Wallet {
         let root_key = rindex::RootKey::new(self.root_cached_key.clone(), self.derivation_scheme);
-        rindex::Wallet::from_root_key(
-            self.derivation_scheme,
-            root_key
-        )
+        rindex::Wallet::from_root_key(self.derivation_scheme, root_key)
     }
 }
 
 #[no_mangle]
-pub extern "C" fn xwallet_create_daedalus_mnemonic(input_ptr: *const c_uchar, input_sz: usize, output_ptr: *mut c_uchar) -> i32 {
-    let mnemonics_phrase : String = input_json!(output_ptr, input_ptr, input_sz);
+pub extern "C" fn xwallet_create_daedalus_mnemonic(
+    input_ptr: *const c_uchar,
+    input_sz: usize,
+    output_ptr: *mut c_uchar,
+) -> i32 {
+    let mnemonics_phrase: String = input_json!(output_ptr, input_ptr, input_sz);
 
     let derivation_scheme = hdwallet::DerivationScheme::V1;
     let selection_policy = SelectionPolicy::FirstMatchFirst;
     let config = Config::default();
 
-    let daedalus_wallet = jrpc_try!(output_ptr, rindex::Wallet::from_daedalus_mnemonics(
-        derivation_scheme,
-        &bip39::dictionary::ENGLISH,
-        mnemonics_phrase
-    ));
+    let daedalus_wallet = jrpc_try!(
+        output_ptr,
+        rindex::Wallet::from_daedalus_mnemonics(
+            derivation_scheme,
+            &bip39::dictionary::ENGLISH,
+            &mnemonics_phrase
+        )
+    );
 
     let wallet = DaedalusWallet {
         root_cached_key: (**daedalus_wallet).clone(),
         config: config,
         selection_policy: selection_policy,
-        derivation_scheme: derivation_scheme
+        derivation_scheme: derivation_scheme,
     };
 
     jrpc_ok!(output_ptr, wallet)
 }
 
-
 // TODO: write custom Serialize and Deserialize with String serialisation
 #[derive(PartialEq, Eq, Debug)]
 pub struct Coin(coin::Coin);
-impl serde::Serialize for Coin
-{
+impl serde::Serialize for Coin {
     #[inline]
     fn serialize<S>(&self, serializer: S) -> result::Result<S::Ok, S::Error>
-        where S: serde::Serializer,
+    where
+        S: serde::Serializer,
     {
-        let v : u64 = *self.0;
+        let v: u64 = *self.0;
         serializer.serialize_str(&format!("{}", v))
     }
 }
@@ -673,22 +815,23 @@ impl<'de> serde::de::Visitor<'de> for CoinVisitor {
     }
 
     fn visit_str<'a, E>(self, v: &'a str) -> result::Result<Self::Value, E>
-        where E: serde::de::Error
+    where
+        E: serde::de::Error,
     {
-        let i : u64 = match v.parse::<u64>() {
+        let i: u64 = match v.parse::<u64>() {
             Ok(v) => v,
             Err(err) => return Err(E::custom(format!("{:?}", err))),
         };
         match coin::Coin::new(i) {
             Err(err) => Err(E::custom(format!("{}", err))),
-            Ok(h) => Ok(Coin(h))
+            Ok(h) => Ok(Coin(h)),
         }
     }
 }
-impl<'de> serde::Deserialize<'de> for Coin
-{
+impl<'de> serde::Deserialize<'de> for Coin {
     fn deserialize<D>(deserializer: D) -> result::Result<Self, D::Error>
-        where D: serde::Deserializer<'de>
+    where
+        D: serde::Deserializer<'de>,
     {
         deserializer.deserialize_str(CoinVisitor())
     }
@@ -697,7 +840,7 @@ impl<'de> serde::Deserialize<'de> for Coin
 #[derive(Serialize, Deserialize, PartialEq, Eq, Debug)]
 pub struct TxOut {
     address: address::ExtendedAddr,
-    value:   Coin
+    value: Coin,
 }
 impl TxOut {
     fn convert(&self) -> tx::TxOut {
@@ -710,21 +853,21 @@ impl TxOut {
 
 #[derive(Serialize, Deserialize, PartialEq, Eq, Debug)]
 pub struct TxIn {
-    id:    tx::TxId,
-    index: u32
+    id: tx::TxId,
+    index: u32,
 }
 impl TxIn {
     fn convert(&self) -> tx::TxoPointer {
         tx::TxoPointer {
             id: self.id,
-            index: self.index
+            index: self.index,
         }
     }
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Eq, Debug)]
 pub struct Input {
-    pub ptr:   TxIn,
+    pub ptr: TxIn,
     pub value: TxOut,
     pub addressing: bip44::Addressing,
 }
@@ -733,7 +876,7 @@ impl Input {
         txutils::Input {
             ptr: self.ptr.convert(),
             value: self.value.convert(),
-            addressing: self.addressing.clone()
+            addressing: self.addressing.clone(),
         }
     }
 }
@@ -743,7 +886,7 @@ struct WalletSpendInput {
     wallet: Bip44Wallet,
     inputs: Vec<Input>,
     outputs: Vec<TxOut>,
-    change_addr: address::ExtendedAddr
+    change_addr: address::ExtendedAddr,
 }
 impl WalletSpendInput {
     fn get_inputs(&self) -> Vec<txutils::Input<<bip44::Wallet as Wallet>::Addressing>> {
@@ -763,8 +906,12 @@ struct WalletSpendOutput {
 }
 
 #[no_mangle]
-pub extern "C" fn xwallet_spend(input_ptr: *const c_uchar, input_sz: usize, output_ptr: *mut c_uchar) -> i32 {
-    let input : WalletSpendInput = input_json!(output_ptr, input_ptr, input_sz);
+pub extern "C" fn xwallet_spend(
+    input_ptr: *const c_uchar,
+    input_sz: usize,
+    output_ptr: *mut c_uchar,
+) -> i32 {
+    let input: WalletSpendInput = input_json!(output_ptr, input_ptr, input_sz);
     let change = input.change_addr.clone();
     let wallet = input.wallet.to_wallet();
     let config = input.wallet.config;
@@ -775,7 +922,8 @@ pub extern "C" fn xwallet_spend(input_ptr: *const c_uchar, input_sz: usize, outp
             input.wallet.selection_policy,
             input.get_inputs().iter(),
             input.get_outputs(),
-            &txutils::OutputPolicy::One(input.change_addr))
+            &txutils::OutputPolicy::One(input.change_addr)
+        )
     );
     let changed_used = txaux.tx.outputs.iter().any(|out| out.address == change);
     let cbor = jrpc_try!(output_ptr, cbor!(&txaux));
@@ -793,14 +941,14 @@ pub extern "C" fn xwallet_spend(input_ptr: *const c_uchar, input_sz: usize, outp
 pub struct TxInInfo {
     pub ptr: TxIn,
     pub value: Coin,
-    pub addressing: [u32;2]
+    pub addressing: [u32; 2],
 }
 impl TxInInfo {
     fn convert(&self) -> txutils::TxoPointerInfo<<rindex::Wallet as Wallet>::Addressing> {
         txutils::TxoPointerInfo {
             txin: self.ptr.convert(),
             value: self.value.0,
-            address_identified: rindex::Addressing::new(self.addressing[0], self.addressing[1])
+            address_identified: rindex::Addressing::new(self.addressing[0], self.addressing[1]),
         }
     }
 }
@@ -809,7 +957,7 @@ impl TxInInfo {
 struct WalletMoveInput {
     wallet: DaedalusWallet,
     inputs: Vec<TxInInfo>,
-    output: address::ExtendedAddr
+    output: address::ExtendedAddr,
 }
 impl WalletMoveInput {
     fn get_inputs(&self) -> Vec<txutils::TxoPointerInfo<<rindex::Wallet as Wallet>::Addressing>> {
@@ -818,8 +966,12 @@ impl WalletMoveInput {
 }
 
 #[no_mangle]
-pub extern "C" fn xwallet_move(input_ptr: *const c_uchar, input_sz: usize, output_ptr: *mut c_uchar) -> i32 {
-    let input : WalletMoveInput = input_json!(output_ptr, input_ptr, input_sz);
+pub extern "C" fn xwallet_move(
+    input_ptr: *const c_uchar,
+    input_sz: usize,
+    output_ptr: *mut c_uchar,
+) -> i32 {
+    let input: WalletMoveInput = input_json!(output_ptr, input_ptr, input_sz);
     let wallet = input.wallet.to_wallet();
     let txaux = jrpc_try!(
         output_ptr,
@@ -843,12 +995,12 @@ pub extern "C" fn xwallet_move(input_ptr: *const c_uchar, input_sz: usize, outpu
 #[derive(Serialize, Deserialize, Debug)]
 struct CreateWalletAccount {
     wallet: Bip44Wallet,
-    account: u32
+    account: u32,
 }
 #[derive(Serialize, Deserialize, Debug)]
 struct Bip44Account {
     root_cached_key: hdwallet::XPub,
-    derivation_scheme: hdwallet::DerivationScheme
+    derivation_scheme: hdwallet::DerivationScheme,
 }
 impl Bip44Account {
     fn to_account(&self) -> bip44::Account<hdwallet::XPub> {
@@ -858,9 +1010,16 @@ impl Bip44Account {
 }
 
 #[no_mangle]
-pub extern "C" fn xwallet_account(input_ptr: *const c_uchar, input_sz: usize, output_ptr: *mut c_uchar) -> i32 {
-    let input : CreateWalletAccount = input_json!(output_ptr, input_ptr, input_sz);
-    let xprv = input.wallet.to_wallet().account(input.wallet.derivation_scheme, input.account);
+pub extern "C" fn xwallet_account(
+    input_ptr: *const c_uchar,
+    input_sz: usize,
+    output_ptr: *mut c_uchar,
+) -> i32 {
+    let input: CreateWalletAccount = input_json!(output_ptr, input_ptr, input_sz);
+    let xprv = input
+        .wallet
+        .to_wallet()
+        .account(input.wallet.derivation_scheme, input.account);
     let xpub = (*xprv).public();
 
     jrpc_ok!(
@@ -876,146 +1035,160 @@ pub extern "C" fn xwallet_account(input_ptr: *const c_uchar, input_sz: usize, ou
 struct GenAddressesInput {
     account: Bip44Account,
     address_type: bip44::AddrType,
-    indices: Vec<u32>
+    indices: Vec<u32>,
 }
 
 #[no_mangle]
-pub extern "C" fn xwallet_addresses(input_ptr: *const c_uchar, input_sz: usize, output_ptr: *mut c_uchar) -> i32 {
-    let input : GenAddressesInput = input_json!(output_ptr, input_ptr, input_sz);
+pub extern "C" fn xwallet_addresses(
+    input_ptr: *const c_uchar,
+    input_sz: usize,
+    output_ptr: *mut c_uchar,
+) -> i32 {
+    let input: GenAddressesInput = input_json!(output_ptr, input_ptr, input_sz);
     let account = input.account.to_account();
-    let changelevel = jrpc_try!(output_ptr, account.change(input.account.derivation_scheme, input.address_type));
-
-    let mut addresses : Vec<address::ExtendedAddr> = Vec::with_capacity(input.indices.len());
-    for index in input.indices.into_iter() {
-        let xpub = jrpc_try!(output_ptr, changelevel.index(input.account.derivation_scheme, index));
-        let addr = address::ExtendedAddr::new_simple(*xpub);
-        addresses.push(
-            addr
-        );
-    }
-    jrpc_ok!(
+    let changelevel = jrpc_try!(
         output_ptr,
-        addresses
-    )
+        account.change(input.account.derivation_scheme, input.address_type)
+    );
+
+    let mut addresses: Vec<address::ExtendedAddr> = Vec::with_capacity(input.indices.len());
+    for index in input.indices.into_iter() {
+        let xpub = jrpc_try!(
+            output_ptr,
+            changelevel.index(input.account.derivation_scheme, index)
+        );
+        let addr = address::ExtendedAddr::new_simple(*xpub, default_network_magic());
+        addresses.push(addr);
+    }
+    jrpc_ok!(output_ptr, addresses)
 }
 
 #[no_mangle]
-pub extern "C" fn xwallet_checkaddress(input_ptr: *const c_uchar, input_sz: usize, output_ptr: *mut c_uchar) -> i32 {
-    let input : String = input_json!(output_ptr, input_ptr, input_sz);
-    let bytes : Vec<u8> = jrpc_try!(output_ptr, hex::decode(&input));
-    let _ : address::ExtendedAddr = jrpc_try!(output_ptr, cbor_event::de::RawCbor::from(&bytes).deserialize());
+pub extern "C" fn xwallet_checkaddress(
+    input_ptr: *const c_uchar,
+    input_sz: usize,
+    output_ptr: *mut c_uchar,
+) -> i32 {
+    let input: String = input_json!(output_ptr, input_ptr, input_sz);
+    let bytes: Vec<u8> = jrpc_try!(output_ptr, hex::decode(&input));
+    let mut deserializer = cbor_event::de::Deserializer::from(bytes.as_slice());
+    let _: address::ExtendedAddr = jrpc_try!(output_ptr, deserializer.deserialize_complete());
     jrpc_ok!(output_ptr, true)
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
 struct RandomAddressChecker {
     root_key: hdwallet::XPrv,
-    payload_key: hdpayload::HDKey
+    payload_key: hdpayload::HDKey,
 }
 
 #[no_mangle]
-pub extern "C" fn random_address_checker_new(input_ptr: *const c_uchar, input_sz: usize, output_ptr: *mut c_uchar) -> i32 {
-    let input : hdwallet::XPrv = input_json!(output_ptr, input_ptr, input_sz);
+pub extern "C" fn random_address_checker_new(
+    input_ptr: *const c_uchar,
+    input_sz: usize,
+    output_ptr: *mut c_uchar,
+) -> i32 {
+    let input: hdwallet::XPrv = input_json!(output_ptr, input_ptr, input_sz);
     let key = hdpayload::HDKey::new(&input.public());
     let rac = RandomAddressChecker {
         root_key: input,
-        payload_key: key
+        payload_key: key,
     };
-    jrpc_ok!(
-        output_ptr,
-        rac
-    )
+    jrpc_ok!(output_ptr, rac)
 }
 #[no_mangle]
-pub extern "C" fn random_address_checker_from_mnemonics(input_ptr: *const c_uchar, input_sz: usize, output_ptr: *mut c_uchar) -> i32 {
-    let mnemonics_phrase : String = input_json!(output_ptr, input_ptr, input_sz);
+pub extern "C" fn random_address_checker_from_mnemonics(
+    input_ptr: *const c_uchar,
+    input_sz: usize,
+    output_ptr: *mut c_uchar,
+) -> i32 {
+    let mnemonics_phrase: String = input_json!(output_ptr, input_ptr, input_sz);
 
-    let wallet = jrpc_try!(output_ptr, rindex::Wallet::from_daedalus_mnemonics(
-        hdwallet::DerivationScheme::V1,
-        &bip39::dictionary::ENGLISH,
-        mnemonics_phrase
-    ));
+    let wallet = jrpc_try!(
+        output_ptr,
+        rindex::Wallet::from_daedalus_mnemonics(
+            hdwallet::DerivationScheme::V1,
+            &bip39::dictionary::ENGLISH,
+            &mnemonics_phrase
+        )
+    );
 
     let xprv = (**wallet).clone();
     let key = hdpayload::HDKey::new(&xprv.public());
     let rac = RandomAddressChecker {
         root_key: xprv,
-        payload_key: key
+        payload_key: key,
     };
-    jrpc_ok!(
-        output_ptr,
-        rac
-    )
+    jrpc_ok!(output_ptr, rac)
 }
-
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
 struct RandomAddressCheck {
     checker: RandomAddressChecker,
-    addresses: Vec<address::ExtendedAddr>
+    addresses: Vec<address::ExtendedAddr>,
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
 struct FoundRandomAddress {
     address: address::ExtendedAddr,
-    addressing: [u32;2]
+    addressing: [u32; 2],
 }
 
 #[no_mangle]
-pub extern "C" fn random_address_check(input_ptr: *const c_uchar, input_sz: usize, output_ptr: *mut c_uchar) -> i32 {
+pub extern "C" fn random_address_check(
+    input_ptr: *const c_uchar,
+    input_sz: usize,
+    output_ptr: *mut c_uchar,
+) -> i32 {
     let RandomAddressCheck { checker, addresses } = input_json!(output_ptr, input_ptr, input_sz);
     let mut results = Vec::new();
     for addr in addresses {
         if let Some(hdpa) = &addr.attributes.derivation_path.clone() {
             if let Ok(path) = checker.payload_key.decrypt_path(hdpa) {
-                results.push(FoundRandomAddress{
+                results.push(FoundRandomAddress {
                     address: addr,
-                    addressing: [path.as_ref()[0], path.as_ref()[1]]
+                    addressing: [path.as_ref()[0], path.as_ref()[1]],
                 })
             }
         }
     }
-    jrpc_ok!(
-        output_ptr,
-        results
-    )
+    jrpc_ok!(output_ptr, results)
 }
 
 mod password_encryption_parameter {
-    pub const ITER       : u32   = 19_162;
-    pub const SALT_SIZE  : usize = 32;
-    pub const NONCE_SIZE : usize = 12;
-    pub const KEY_SIZE   : usize = 32;
-    pub const TAG_SIZE   : usize = 16;
+    pub const ITER: u32 = 19_162;
+    pub const SALT_SIZE: usize = 32;
+    pub const NONCE_SIZE: usize = 12;
+    pub const KEY_SIZE: usize = 32;
+    pub const TAG_SIZE: usize = 16;
 
-    pub const METADATA_SIZE : usize = SALT_SIZE + NONCE_SIZE + TAG_SIZE;
+    pub const METADATA_SIZE: usize = SALT_SIZE + NONCE_SIZE + TAG_SIZE;
 
-    pub const SALT_START      : usize = 0;
-    pub const SALT_END        : usize = SALT_START + SALT_SIZE;
-    pub const NONCE_START     : usize = SALT_END;
-    pub const NONCE_END       : usize = NONCE_START + NONCE_SIZE;
-    pub const TAG_START       : usize = NONCE_END;
-    pub const TAG_END         : usize = TAG_START + TAG_SIZE;
-    pub const ENCRYPTED_START : usize = TAG_END;
+    pub const SALT_START: usize = 0;
+    pub const SALT_END: usize = SALT_START + SALT_SIZE;
+    pub const NONCE_START: usize = SALT_END;
+    pub const NONCE_END: usize = NONCE_START + NONCE_SIZE;
+    pub const TAG_START: usize = NONCE_END;
+    pub const TAG_END: usize = TAG_START + TAG_SIZE;
+    pub const ENCRYPTED_START: usize = TAG_END;
 }
 
 #[no_mangle]
-pub extern "C" fn encrypt_with_password( password_ptr: *const c_uchar
-                                       , password_sz: usize
-                                       , salt_ptr: *const c_uchar  // expect 32 bytes
-                                       , nonce_ptr: *const c_uchar // expect 12 bytes
-                                       , data_ptr: *const c_uchar
-                                       , data_sz: usize
-                                       , output_ptr: *mut c_uchar
-                                       )
-    -> i32
-{
+pub extern "C" fn encrypt_with_password(
+    password_ptr: *const c_uchar,
+    password_sz: usize,
+    salt_ptr: *const c_uchar,  // expect 32 bytes
+    nonce_ptr: *const c_uchar, // expect 12 bytes
+    data_ptr: *const c_uchar,
+    data_sz: usize,
+    output_ptr: *mut c_uchar,
+) -> i32 {
     use password_encryption_parameter::*;
 
     let password = unsafe { read_data(password_ptr, password_sz) };
-    let salt     = unsafe { read_data(salt_ptr, SALT_SIZE) };
-    let nonce    = unsafe { read_data(nonce_ptr, NONCE_SIZE) };
-    let data     = unsafe { read_data(data_ptr, data_sz) };
+    let salt = unsafe { read_data(salt_ptr, SALT_SIZE) };
+    let nonce = unsafe { read_data(nonce_ptr, NONCE_SIZE) };
+    let data = unsafe { read_data(data_ptr, data_sz) };
 
     let key = {
         let mut mac = Hmac::new(Sha512::new(), &password);
@@ -1024,11 +1197,10 @@ pub extern "C" fn encrypt_with_password( password_ptr: *const c_uchar
         key
     };
 
-    let mut tag = [0;TAG_SIZE];
-    let mut encrypted : Vec<u8> = repeat(0).take(data.len()).collect();
+    let mut tag = [0; TAG_SIZE];
+    let mut encrypted: Vec<u8> = repeat(0).take(data.len()).collect();
     {
-        ChaCha20Poly1305::new(&key, &nonce, &[])
-            .encrypt(&data, &mut encrypted, &mut tag);
+        ChaCha20Poly1305::new(&key, &nonce, &[]).encrypt(&data, &mut encrypted, &mut tag);
     }
 
     let mut output = Vec::with_capacity(data.len() + METADATA_SIZE);
@@ -1042,16 +1214,14 @@ pub extern "C" fn encrypt_with_password( password_ptr: *const c_uchar
     output.len() as i32
 }
 
-
 #[no_mangle]
-pub extern "C" fn decrypt_with_password( password_ptr: *const c_uchar
-                                       , password_sz: usize
-                                       , data_ptr: *const c_uchar
-                                       , data_sz: usize
-                                       , output_ptr: *mut c_uchar
-                                       )
-    -> i32
-{
+pub extern "C" fn decrypt_with_password(
+    password_ptr: *const c_uchar,
+    password_sz: usize,
+    data_ptr: *const c_uchar,
+    data_sz: usize,
+    output_ptr: *mut c_uchar,
+) -> i32 {
     use password_encryption_parameter::*;
     let password = unsafe { read_data(password_ptr, password_sz) };
     let data = unsafe { read_data(data_ptr, data_sz) };
@@ -1073,11 +1243,9 @@ pub extern "C" fn decrypt_with_password( password_ptr: *const c_uchar
         key
     };
 
-    let mut decrypted : Vec<u8> = repeat(0).take(encrypted.len()).collect();
-    let decryption_succeed = {
-        ChaCha20Poly1305::new(&key, &nonce, &[])
-            .decrypt(&encrypted, &mut decrypted, &tag)
-    };
+    let mut decrypted: Vec<u8> = repeat(0).take(encrypted.len()).collect();
+    let decryption_succeed =
+        { ChaCha20Poly1305::new(&key, &nonce, &[]).decrypt(&encrypted, &mut decrypted, &tag) };
 
     if decryption_succeed {
         unsafe { write_data(&decrypted, output_ptr) };
