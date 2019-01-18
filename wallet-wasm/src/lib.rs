@@ -25,6 +25,7 @@ use self::cardano::wallet::{
     scheme::{SelectionPolicy, Wallet},
 };
 use self::cardano::{coin, fee, tx, txutils, util::hex};
+use self::cardano::{redeem, txbuild};
 
 use self::cardano::util::try_from_slice::TryFromSlice;
 
@@ -1253,4 +1254,41 @@ pub extern "C" fn decrypt_with_password(
     } else {
         -1
     }
+}
+
+#[no_mangle]
+pub extern "C" fn redemption_private_to_address(
+    private_ptr: *const c_uchar,
+    protocol_magic: u32,
+    out: *mut c_uchar,
+) -> u32 {
+    let priv_key = unsafe {
+        let slice: &[u8] = std::slice::from_raw_parts(private_ptr, redeem::PRIVATEKEY_SIZE);
+        redeem::PrivateKey::from_slice(slice).unwrap()
+    };
+    let pub_key = priv_key.public();
+    let addr_type = address::AddrType::ATRedeem;
+    let addr_data = address::SpendingData::RedeemASD(pub_key.clone());
+    let magic = cardano::config::ProtocolMagic::new(protocol_magic);
+    let addr_attr = address::Attributes::new_bootstrap_era(None,magic.into());
+    let address = address::ExtendedAddr::new(addr_type, addr_data, addr_attr));
+    let address_bytes = cbor!(address).unwrap();
+    unsafe { write_data(&address_bytes, out) }
+    return address_bytes.len() as u32;
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct WalletRedeemInput {
+    redemption_key: redeem::PrivateKey,
+    input: TxIn,
+    output: TxOut,
+}
+
+#[no_mangle]
+pub extern "C" fn xwallet_redeem(
+    input_ptr: *const c_uchar,
+    input_sz: usize,
+    output_ptr: *mut c_uchar,
+) -> i32 {
+
 }
