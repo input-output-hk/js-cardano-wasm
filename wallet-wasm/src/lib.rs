@@ -1279,9 +1279,15 @@ pub extern "C" fn redemption_private_to_address(
 
 #[derive(Serialize, Deserialize, Debug)]
 struct WalletRedeemInput {
+    protocol_magic: u32,
     redemption_key: redeem::PrivateKey,
     input: TxIn,
     output: TxOut,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct WalletRedeemOutput {
+    cbor_encoded_tx: Vec<u8>,
 }
 
 #[no_mangle]
@@ -1290,5 +1296,27 @@ pub extern "C" fn xwallet_redeem(
     input_sz: usize,
     output_ptr: *mut c_uchar,
 ) -> i32 {
-
+    let data: WalletRedeemInput = input_json!(output_ptr, input_ptr, input_sz);
+    let &mut txbuilder = txbuild::TxBuilder::new();
+    txbuilder.add_input(&data.input.convert(), data.output.value.0);
+    txbuilder.add_output_value(&data.output.convert());
+    let tx: result::Result<Transaction, JsValue> = txbuilder.make_tx()
+        .map_err(|e| JsValue::from_str(&format! {"{:?}", e}));
+    let txaux: tx::TxAux = jrpc_try!(output_ptr, tx.and_then(|tx| {
+        let magic = cardano::config::ProtocolMagic::new(data.protocol_magic);
+        let witness = tx::TxInWitness::redeem(magic, &data.redemption_key, &tx.0.id());
+        let &mut finalized = txbuild::TxFinalized::new(tx);
+        let witness_result: result::Result<(), JsValue> = finalized
+            .add_witness(witness)
+            .map_err(|e| JsValue::from_str(&format! {"{:?}", e}));
+        return witness_result.and_then(|| {
+            return finalized
+                .make_txaux()
+                .map_err(|e| JsValue::from_str(&format! {"{:?}", e}));
+        });
+    }));
+    let cbor = jrpc_try!(output_ptr, cbor!(&txaux));
+    jrpc_ok!(output_ptr, WalletRedeemOutput {
+        cbor_encoded_tx: cbor
+    })
 }
