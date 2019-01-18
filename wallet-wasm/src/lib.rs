@@ -1279,7 +1279,7 @@ pub extern "C" fn redemption_private_to_address(
 
 #[derive(Serialize, Deserialize, Debug)]
 struct WalletRedeemInput {
-    protocol_magic: u32,
+    protocol_magic: cardano::config::ProtocolMagic,
     redemption_key: redeem::PrivateKey,
     input: TxIn,
     output: TxOut,
@@ -1300,21 +1300,24 @@ pub extern "C" fn xwallet_redeem(
     let &mut txbuilder = txbuild::TxBuilder::new();
     txbuilder.add_input(&data.input.convert(), data.output.value.0);
     txbuilder.add_output_value(&data.output.convert());
-    let tx: result::Result<Transaction, JsValue> = txbuilder.make_tx()
-        .map_err(|e| JsValue::from_str(&format! {"{:?}", e}));
-    let txaux: tx::TxAux = jrpc_try!(output_ptr, tx.and_then(|tx| {
-        let magic = cardano::config::ProtocolMagic::new(data.protocol_magic);
-        let witness = tx::TxInWitness::redeem(magic, &data.redemption_key, &tx.0.id());
-        let &mut finalized = txbuild::TxFinalized::new(tx);
-        let witness_result: result::Result<(), JsValue> = finalized
-            .add_witness(witness)
-            .map_err(|e| JsValue::from_str(&format! {"{:?}", e}));
-        return witness_result.and_then(|| {
-            return finalized
-                .make_txaux()
-                .map_err(|e| JsValue::from_str(&format! {"{:?}", e}));
-        });
-    }));
+    let tx: tx::Tx = jrpc_try!(
+        output_ptr,
+        txbuilder.make_tx()
+            .map_err(|e| JsValue::from_str(&format! {"{:?}", e}))
+    );
+    let witness = tx::TxInWitness::redeem(
+        data.protocol_magic, &data.redemption_key, &tx.0.id());
+    let &mut finalized = txbuild::TxFinalized::new(tx);
+    jrpc_try!(
+        output_ptr,
+        finalized.add_witness(witness)
+            .map_err(|e| JsValue::from_str(&format! {"{:?}", e}))
+    );
+    let txaux: tx::TxAux = jrpc_try!(
+        output_ptr,
+        finalized.make_txaux()
+            .map_err(|e| JsValue::from_str(&format! {"{:?}", e}))
+    );
     let cbor = jrpc_try!(output_ptr, cbor!(&txaux));
     jrpc_ok!(output_ptr, WalletRedeemOutput {
         cbor_encoded_tx: cbor
