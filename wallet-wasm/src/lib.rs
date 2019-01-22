@@ -1267,11 +1267,8 @@ pub extern "C" fn redemption_private_to_address(
         redeem::PrivateKey::from_slice(slice).unwrap()
     };
     let pub_key = priv_key.public();
-    let addr_type = address::AddrType::ATRedeem;
-    let addr_data = address::SpendingData::RedeemASD(pub_key.clone());
     let magic = cardano::config::ProtocolMagic::from(protocol_magic);
-    let addr_attr = address::Attributes::new_bootstrap_era(None,magic.into());
-    let address = address::ExtendedAddr::new(addr_type, addr_data, addr_attr);
+    let (_, address) = tx::redeem_pubkey_to_txid(&pub_key, magic);
     let address_bytes = cbor!(address).unwrap();
     unsafe { write_data(&address_bytes, out) }
     return address_bytes.len() as u32;
