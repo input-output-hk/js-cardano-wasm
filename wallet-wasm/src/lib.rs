@@ -1269,9 +1269,9 @@ pub extern "C" fn redemption_private_to_address(
     let pub_key = priv_key.public();
     let addr_type = address::AddrType::ATRedeem;
     let addr_data = address::SpendingData::RedeemASD(pub_key.clone());
-    let magic = cardano::config::ProtocolMagic::new(protocol_magic);
+    let magic = cardano::config::ProtocolMagic::from(protocol_magic);
     let addr_attr = address::Attributes::new_bootstrap_era(None,magic.into());
-    let address = address::ExtendedAddr::new(addr_type, addr_data, addr_attr));
+    let address = address::ExtendedAddr::new(addr_type, addr_data, addr_attr);
     let address_bytes = cbor!(address).unwrap();
     unsafe { write_data(&address_bytes, out) }
     return address_bytes.len() as u32;
@@ -1280,7 +1280,7 @@ pub extern "C" fn redemption_private_to_address(
 #[derive(Serialize, Deserialize, Debug)]
 struct WalletRedeemInput {
     protocol_magic: cardano::config::ProtocolMagic,
-    redemption_key: redeem::PrivateKey,
+    redemption_key: [u8; redeem::PRIVATEKEY_SIZE], // hex
     input: TxIn,
     output: TxOut,
 }
@@ -1297,29 +1297,48 @@ pub extern "C" fn xwallet_redeem(
     output_ptr: *mut c_uchar,
 ) -> i32 {
     let data: WalletRedeemInput = input_json!(output_ptr, input_ptr, input_sz);
-    let &mut txbuilder = txbuild::TxBuilder::new();
+    let mut txbuilder = txbuild::TxBuilder::new();
     txbuilder.add_input(&data.input.convert(), data.output.value.0);
     txbuilder.add_output_value(&data.output.convert());
     let tx: tx::Tx = jrpc_try!(
         output_ptr,
         txbuilder.make_tx()
-            .map_err(|e| JsValue::from_str(&format! {"{:?}", e}))
     );
-    let witness = tx::TxInWitness::redeem(
-        data.protocol_magic, &data.redemption_key, &tx.0.id());
-    let &mut finalized = txbuild::TxFinalized::new(tx);
+    print!("Tx: {}", tx);
+    let redemption_key = jrpc_try!(
+        output_ptr,
+        redeem::PrivateKey::from_slice(&data.redemption_key)
+    );
+    print!("Key: {}", redemption_key);
+    let witness = jrpc_try!(
+        output_ptr,
+        create_redemption_witness(data.protocol_magic, &redemption_key, &tx.id())
+    );
+    let mut finalized = txbuild::TxFinalized::new(tx);
     jrpc_try!(
         output_ptr,
         finalized.add_witness(witness)
-            .map_err(|e| JsValue::from_str(&format! {"{:?}", e}))
     );
     let txaux: tx::TxAux = jrpc_try!(
         output_ptr,
         finalized.make_txaux()
-            .map_err(|e| JsValue::from_str(&format! {"{:?}", e}))
     );
     let cbor = jrpc_try!(output_ptr, cbor!(&txaux));
     jrpc_ok!(output_ptr, WalletRedeemOutput {
         cbor_encoded_tx: cbor
     })
+}
+
+fn create_redemption_witness(
+    protocol_magic: cardano::config::ProtocolMagic,
+    key: &redeem::PrivateKey,
+    txid: &tx::TxId,
+) -> redeem::Result<tx::TxInWitness> {
+    // TODO: actual implementation
+    let s32 = (0..64).map(|_| "f").collect::<String>();
+    let s64 = (0..128).map(|_| "f").collect::<String>();
+    let pk = redeem::PublicKey::from_hex(&s32);
+    let sg = redeem::Signature::from_hex(&s64);
+    return pk.and_then(|k| sg.map(|s| (k, s)))
+        .map(|(k,s)| tx::TxInWitness::RedeemWitness(k, s));
 }

@@ -16,7 +16,7 @@ export const redemptionKeyToAddress = (module, redemptionKey, magic) => {
     if (redemptionKey.length !== REDEMPTION_PRIVATE_KEY_SIZE) {
         return false;
     }
-    const bufkey = newArray(module, seed);
+    const bufkey = newArray(module, redemptionKey);
     const bufaddr = newArray0(module, 1024);
     const rs = module.redemption_private_to_address(bufkey, magic, bufaddr);
     let result = copyArray(module, bufaddr, rs);
@@ -37,6 +37,8 @@ export const createRedemptionTransaction = (module, redemptionKey, input, output
     if (redemptionKey.length !== REDEMPTION_PRIVATE_KEY_SIZE) {
         return false;
     }
+    redemptionKey = [...Buffer.from(redemptionKey)];
+    input.id = Buffer.from(input.id).toString('hex');
     const input_obj = { protocol_magic: magic, redemption_key: redemptionKey, input, output };
     const input_str = JSON.stringify(input_obj);
     const input_array = iconv.encode(input_str, 'utf8');
