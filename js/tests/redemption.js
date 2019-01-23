@@ -67,8 +67,6 @@ let mkTest = (i) => {
           const [[witnessType, witnessTagged]] = resultWitnesses;
           expect(witnessType).equal(2);
           const [witnessPub, witnessSign] = cbor.decode(witnessTagged.value);
-
-          // TODO: expecting fake witness data - fix after implementing signing in Rust
           expect(witnessPub.toString('hex'))
             .equal(expectedPublicKey);
           expect(witnessSign.toString('hex'))
