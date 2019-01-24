@@ -8,6 +8,8 @@ const TEST_VECTORS = [
   {
     redemptionKey: Buffer.from('qXQWDxI3JrlFRtC4SeQjeGzLbVXWBomYPbNO1Vfm1T4=', 'base64'),
     expectedAddress: 'Ae2tdPwUPEZ1xZTLczMGYL5PhADi1nbFmESqS9vUuLkyUe1isQ77TRUE9NS',
+    expectedPublicKey: 'faf8ed5be127c8ea22e3a0f1b9335f910aaa672e96c41d7cbdcaed897a450667',
+    expectedSignature: '80ed81b9f3683684fdb7c286eb7cfa63580a239ed6bf67f71643d290de2206855171003c7f33cad04e9fa28ee5d5c18c4e5f0d788ae2a63fa492ba7b59995c03',
     txId: new Uint8Array([0xaa,0xd7,0x8a,0x13,0xb5,0x0a,0x01,0x4a,0x24,0x63,0x3c,0x7d,0x44,0xfd,0x8f,0x8d,0x18,0xf6,0x7b,0xbb,0x3f,0xa9,0xcb,0xce,0xdf,0x83,0x4a,0xc8,0x99,0x75,0x9d,0xcd]),
     txOutIndex: 1,
     coinValue: 12345678
@@ -15,7 +17,7 @@ const TEST_VECTORS = [
 ];
 
 let mkTest = (i) => {
-    const { redemptionKey, expectedAddress, txId, txOutIndex, coinValue } = TEST_VECTORS[i];
+    const { redemptionKey, expectedAddress, expectedPublicKey, expectedSignature, txId, txOutIndex, coinValue } = TEST_VECTORS[i];
     const cfg = CardanoCrypto.Config.defaultConfig();
 
     describe('Test ' + i, function() {
@@ -65,12 +67,10 @@ let mkTest = (i) => {
           const [[witnessType, witnessTagged]] = resultWitnesses;
           expect(witnessType).equal(2);
           const [witnessPub, witnessSign] = cbor.decode(witnessTagged.value);
-
-          // TODO: expecting fake witness data - fix after implementing signing in Rust
           expect(witnessPub.toString('hex'))
-            .equal('ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff');
+            .equal(expectedPublicKey);
           expect(witnessSign.toString('hex'))
-            .equal('ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff');
+            .equal(expectedSignature);
         });
     });
 };
