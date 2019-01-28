@@ -1,0 +1,47 @@
+[package]
+name = "cardano-wallet"
+version = "0.2.1"
+authors = ["Nicolas Di Prima <nicolas.diprima@iohk.io>"]
+description = "Cardano Wallet, from rust to JS via Wasm"
+homepage = "https://github.com/input-output-hk/js-cardano-wasm#README.md"
+repository = "https://github.com/input-output-hk/js-cardano-wasm"
+readme = "README.md"
+keywords = ["wasm", "cardano", "wallet", "crypto", "ada"]
+license = "MIT OR Apache-2.0"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = ["console_error_panic_hook"]
+
+[dependencies]
+cfg-if = "0.1.6"
+wasm-bindgen =  { version = "0.2", features = [ "serde-serialize" ] }
+serde = "1.0"
+serde_derive = "1.0"
+cryptoxide = "0.1"
+cbor_event = "^2.1.2"
+cardano = { path = "../rust/cardano", features = ["generic-serialization"] }
+
+
+# The `console_error_panic_hook` crate provides better debugging of panics by
+# logging them with `console.error`. This is great for development, but requires
+# all the `std::fmt` and `std::panicking` infrastructure, so isn't great for
+# code size when deploying.
+console_error_panic_hook = { version = "0.1.5", optional = true }
+
+# `wee_alloc` is a tiny allocator for wasm that is only ~1K in code size
+# compared to the default allocator's ~10K. It is slower than the default
+# allocator, however.
+#
+# Unfortunately, `wee_alloc` requires nightly Rust when targeting wasm for now.
+wee_alloc = { version = "0.4.2", optional = true }
+
+[dev-dependencies]
+wasm-bindgen-test = "0.2"
+lazy_static = "^1.2"
+
+[profile.release]
+# Tell `rustc` to optimize for small code size.
+opt-level = "s"
