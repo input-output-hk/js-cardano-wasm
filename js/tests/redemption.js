@@ -25,13 +25,18 @@ let mkTest = (i) => {
             await CardanoCrypto.loadRustModule()
         });
 
-        it('generates valid address', function() {
+        it('generates valid avvm tx from public', function () {
+          const a = CardanoCrypto.Redemption.redemptionPubKeyToAvvmTxOut('URVk8FxX6Ik9z-Cub09oOxMkp6FwNq27kJUXbjJnfsQ=', cfg.protocol_magic);
+          console.log(a);
+        });
+
+        it('generates valid address from private', function() {
           const a = CardanoCrypto.Redemption.redemptionKeyToAddress(redemptionKey, cfg.protocol_magic);
           const [tagged, checksum] = cbor.decode(Buffer.from(a));
           expect(crc.crc32(tagged.value)).equal(checksum);
         });
 
-        it('creates address matching expected', function() {
+        it('creates address from private matching expected', function() {
           const a = CardanoCrypto.Redemption.redemptionKeyToAddress(redemptionKey, cfg.protocol_magic);
           expect(bs58.encode(Buffer.from(a))).equal(expectedAddress)
         });
