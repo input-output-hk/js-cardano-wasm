@@ -803,7 +803,7 @@ impl serde::Serialize for Coin {
     where
         S: serde::Serializer,
     {
-        let v: u64 = *self.0;
+        let v: u64 = u64::from(self.0);
         serializer.serialize_str(&format!("{}", v))
     }
 }

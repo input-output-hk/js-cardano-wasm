@@ -33,10 +33,10 @@ export const redemptionKeyToAddress = (module, redemptionKey, magic) => {
  * @returns {*}            - returns false if the seed is not of the valid length, or returns the response as: { tx_id, address }
  */
 export const redemptionPubKeyToAvvmTxOut = (module, redemptionPubKey, magic) => {
-    if (redemptionKey.length !== REDEMPTION_PRIVATE_KEY_SIZE) {
+    if (redemptionPubKey.length !== REDEMPTION_PUBLIC_KEY_SIZE) {
         return false;
     }
-    const bufkey = newArray(module, redemptionKey);
+    const bufkey = newArray(module, redemptionPubKey);
     const bufoutput = newArray0(module, MAX_OUTPUT_SIZE);
     const rsz = module.redemption_public_to_avvm_tx_out(bufkey, magic, bufoutput);
     let output_array = copyArray(module, bufoutput, rsz);
@@ -79,5 +79,6 @@ export const createRedemptionTransaction = (module, redemptionKey, input, output
 
 export default {
     redemptionKeyToAddress: apply(redemptionKeyToAddress, RustModule),
+    redemptionPubKeyToAvvmTxOut: apply(redemptionPubKeyToAvvmTxOut, RustModule),
     createRedemptionTransaction: apply(createRedemptionTransaction, RustModule),
 };
