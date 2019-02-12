@@ -1287,13 +1287,13 @@ pub extern "C" fn redemption_public_to_avvm_tx_out(
     protocol_magic: u32,
     output_ptr: *mut c_uchar,
 ) -> i32 {
-    let pub_key = unsafe {
+    let pub_key: redeem::PublicKey = unsafe {
         let slice: &[u8] = std::slice::from_raw_parts(public_ptr, redeem::PUBLICKEY_SIZE);
-        redeem::PublicKey::from_slice(slice).unwrap()
+        jrpc_try!(output_ptr, redeem::PublicKey::from_slice(slice))
     };
     let magic = cardano::config::ProtocolMagic::from(protocol_magic);
     let (tx, address) = tx::redeem_pubkey_to_txid(&pub_key, magic);
-    let address_bytes = cbor!(address).unwrap();
+    let address_bytes = jrpc_try!(output_ptr, cbor!(address));
     jrpc_ok!(output_ptr, RedemptionAvvmTxOutput {
         tx_id: tx,
         address: address_bytes
