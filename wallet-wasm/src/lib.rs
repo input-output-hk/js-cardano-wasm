@@ -803,7 +803,7 @@ impl serde::Serialize for Coin {
     where
         S: serde::Serializer,
     {
-        let v: u64 = *self.0;
+        let v: u64 = u64::from(self.0);
         serializer.serialize_str(&format!("{}", v))
     }
 }
@@ -1272,6 +1272,32 @@ pub extern "C" fn redemption_private_to_address(
     let address_bytes = cbor!(address).unwrap();
     unsafe { write_data(&address_bytes, out) }
     return address_bytes.len() as u32;
+}
+
+
+#[derive(Serialize, Deserialize, Debug)]
+struct RedemptionAvvmTxOutput {
+    tx_id: tx::TxId,
+    address: Vec<u8>,
+}
+
+#[no_mangle]
+pub extern "C" fn redemption_public_to_avvm_tx_out(
+    public_ptr: *const c_uchar,
+    protocol_magic: u32,
+    output_ptr: *mut c_uchar,
+) -> i32 {
+    let pub_key: redeem::PublicKey = unsafe {
+        let slice: &[u8] = std::slice::from_raw_parts(public_ptr, redeem::PUBLICKEY_SIZE);
+        jrpc_try!(output_ptr, redeem::PublicKey::from_slice(slice))
+    };
+    let magic = cardano::config::ProtocolMagic::from(protocol_magic);
+    let (tx, address) = tx::redeem_pubkey_to_txid(&pub_key, magic);
+    let address_bytes = jrpc_try!(output_ptr, cbor!(address));
+    jrpc_ok!(output_ptr, RedemptionAvvmTxOutput {
+        tx_id: tx,
+        address: address_bytes
+    })
 }
 
 #[derive(Serialize, Deserialize, Debug)]
