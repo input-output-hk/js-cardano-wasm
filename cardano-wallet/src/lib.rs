@@ -924,8 +924,11 @@ impl TransactionFinalized {
         blockchain_settings: &BlockchainSettings,
         key: &PrivateKey,
     ) -> Result<(), JsValue> {
-        let signature =
-            tx::TxInWitness::new(blockchain_settings.protocol_magic, &key.0, &self.tx_id);
+        let signature = tx::TxInWitness::new_extended_pk(
+            blockchain_settings.protocol_magic,
+            &key.0,
+            &self.tx_id,
+        );
         self.finalized
             .add_witness(signature)
             .map_err(|e| JsValue::from_str(&format! {"{:?}", e}))
