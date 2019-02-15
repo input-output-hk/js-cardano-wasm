@@ -1,6 +1,6 @@
 [package]
 name = "cardano-wallet"
-version = "0.2.2"
+version = "0.2.3"
 authors = ["Nicolas Di Prima <nicolas.diprima@iohk.io>"]
 description = "Cardano Wallet, from rust to JS via Wasm"
 homepage = "https://github.com/input-output-hk/js-cardano-wasm#README.md"
