@@ -145,6 +145,13 @@ impl Entropy {
 pub struct PrivateKey(hdwallet::XPrv);
 #[wasm_bindgen]
 impl PrivateKey {
+    /// create a new private key from a given Entropy
+    pub fn new(entropy: &Entropy, password: &str) -> PrivateKey {
+        let mut bytes = [0; hdwallet::XPRV_SIZE];
+        wallet::keygen::generate_seed(&entropy.0, password.as_bytes(), &mut bytes);
+        PrivateKey(hdwallet::XPrv::normalize_bytes(bytes))
+    }
+
     /// retrieve a private key from the given hexadecimal string
     pub fn from_hex(hex: &str) -> Result<PrivateKey, JsValue> {
         use std::str::FromStr;
@@ -361,9 +368,7 @@ impl Bip44RootPrivateKey {
     /// * empty password;
     ///
     pub fn recover(entropy: &Entropy, password: &str) -> Result<Bip44RootPrivateKey, JsValue> {
-        let mut bytes = [0; hdwallet::XPRV_SIZE];
-        wallet::keygen::generate_seed(&entropy.0, password.as_bytes(), &mut bytes);
-        let key = PrivateKey(hdwallet::XPrv::normalize_bytes(bytes));
+        let key = PrivateKey::new(entropy, password);
 
         let rpk = Bip44RootPrivateKey {
             key: key,
@@ -924,8 +929,11 @@ impl TransactionFinalized {
         blockchain_settings: &BlockchainSettings,
         key: &PrivateKey,
     ) -> Result<(), JsValue> {
-        let signature =
-            tx::TxInWitness::new(blockchain_settings.protocol_magic, &key.0, &self.tx_id);
+        let signature = tx::TxInWitness::new_extended_pk(
+            blockchain_settings.protocol_magic,
+            &key.0,
+            &self.tx_id,
+        );
         self.finalized
             .add_witness(signature)
             .map_err(|e| JsValue::from_str(&format! {"{:?}", e}))
