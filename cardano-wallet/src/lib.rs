@@ -724,7 +724,7 @@ impl TxOut {
     }
 
     /// retrieve the object from a JsValue.
-    pub fn from_json(value: JsValue) -> Result<TxoPointer, JsValue> {
+    pub fn from_json(value: JsValue) -> Result<TxOut, JsValue> {
         value
             .into_serde()
             .map_err(|e| JsValue::from_str(&format! {"{:?}", e}))
