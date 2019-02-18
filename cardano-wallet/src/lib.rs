@@ -912,6 +912,7 @@ pub struct TransactionFinalized {
 }
 #[wasm_bindgen]
 impl TransactionFinalized {
+    #[wasm_bindgen(constructor)]
     pub fn new(transaction: Transaction) -> TransactionFinalized {
         TransactionFinalized {
             tx_id: transaction.0.id(),
