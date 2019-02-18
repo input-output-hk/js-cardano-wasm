@@ -724,7 +724,7 @@ impl TxOut {
     }
 
     /// retrieve the object from a JsValue.
-    pub fn from_json(value: JsValue) -> Result<TxoPointer, JsValue> {
+    pub fn from_json(value: JsValue) -> Result<TxOut, JsValue> {
         value
             .into_serde()
             .map_err(|e| JsValue::from_str(&format! {"{:?}", e}))
@@ -912,6 +912,7 @@ pub struct TransactionFinalized {
 }
 #[wasm_bindgen]
 impl TransactionFinalized {
+    #[wasm_bindgen(constructor)]
     pub fn new(transaction: Transaction) -> TransactionFinalized {
         TransactionFinalized {
             tx_id: transaction.0.id(),
