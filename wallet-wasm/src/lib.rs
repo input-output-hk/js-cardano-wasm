@@ -1327,12 +1327,10 @@ pub extern "C" fn xwallet_redeem(
         output_ptr,
         txbuilder.make_tx()
     );
-    print!("Tx: {}", tx);
     let redemption_key = jrpc_try!(
         output_ptr,
         redeem::PrivateKey::from_slice(&data.redemption_key)
     );
-    print!("Key: {}", redemption_key);
     let witness = tx::TxInWitness::new_redeem_pk(
         data.protocol_magic, &redemption_key, &tx.id());
     let mut finalized = txbuild::TxFinalized::new(tx);
