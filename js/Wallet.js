@@ -54,6 +54,27 @@ export const fromMasterKey = (module, xprv) => {
     return JSON.parse(output_str);
 };
 
+/**
+ * Create a Daedalus wallet object from the given seed.
+ *
+ * @param module - the WASM module that is used for crypto operations
+ * @param xprv   - the 96 bytes master key
+ * @returns {*}  - a wallet object (JSON object)
+ */
+export const fromDaedalusMasterKey = (module, xprv) => {
+    const bufinput  = newArray(module, xprv);
+    const bufoutput = newArray0(module, MAX_OUTPUT_SIZE);
+
+    let rsz = module.xwallet_create_daedalus_master_key(bufinput, bufoutput);
+    let output_array = copyArray(module, bufoutput, rsz);
+
+    module.dealloc(bufoutput);
+    module.dealloc(bufinput);
+
+    let output_str = iconv.decode(Buffer.from(output_array), 'utf8');
+    return JSON.parse(output_str);
+};
+
 
 /**
  * Create a wallet object from the given seed.
@@ -309,6 +330,7 @@ export const checkAddress = (module, address) => {
 export default {
   fromSeed: apply(fromSeed, RustModule),
   fromMasterKey: apply(fromMasterKey, RustModule),
+  fromDaedalusMasterKey: apply(fromDaedalusMasterKey, RustModule),
   fromDaedalusMnemonic: apply(fromDaedalusMnemonic, RustModule),
   newAccount: apply(newAccount, RustModule),
   generateAddresses: apply(generateAddresses, RustModule),

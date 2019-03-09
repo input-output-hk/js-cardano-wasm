@@ -794,6 +794,27 @@ pub extern "C" fn xwallet_create_daedalus_mnemonic(
     jrpc_ok!(output_ptr, wallet)
 }
 
+#[no_mangle]
+pub extern "C" fn xwallet_create_daedalus_master_key(
+    input_ptr: *const c_uchar,
+    output_ptr: *mut c_uchar,
+) -> i32 {
+    let xprv = unsafe { read_xprv(input_ptr) };
+
+    let derivation_scheme = hdwallet::DerivationScheme::V1;
+    let selection_policy = SelectionPolicy::FirstMatchFirst;
+    let config = Config::default();
+
+    let wallet = DaedalusWallet {
+        root_cached_key: xprv,
+        config: config,
+        selection_policy: selection_policy,
+        derivation_scheme: derivation_scheme,
+    };
+
+    jrpc_ok!(output_ptr, wallet)
+}
+
 // TODO: write custom Serialize and Deserialize with String serialisation
 #[derive(PartialEq, Eq, Debug)]
 pub struct Coin(coin::Coin);
