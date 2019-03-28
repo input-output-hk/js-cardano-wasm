@@ -3,6 +3,13 @@
 // will work here one day as well!
 const Wallet = import('cardano-wallet');
 
+import { TextEncoder, TextDecoder } from 'text-encoder';
+
+// patch missing functions
+var util = require('util');
+util.TextEncoder = TextEncoder;
+util.TextDecoder = TextDecoder;
+
 let RustWallet = null;
 
 Wallet
