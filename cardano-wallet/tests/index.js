@@ -4,6 +4,7 @@
 const Wallet = import('cardano-wallet');
 
 import { TextEncoder, TextDecoder } from 'text-encoder';
+import cryptoRandomString from 'crypto-random-string';
 
 // patch missing functions
 var util = require('util');
@@ -15,18 +16,39 @@ let RustWallet = null;
 Wallet
   .then(Wallet => {
     const MNEMONICS = "crowd captain hungry tray powder motor coast oppose month shed parent mystery torch resemble index";
-    const PASSWORD = "Cardano Rust for the winners!";
+    const MNEMONIC_PASSWORD = "Cardano Rust for the winners!";
+    const SPENDING_PASSWORD = 'Cardano Rust for all!';
 
     let settings = Wallet.BlockchainSettings.mainnet();
 
     let entropy = Wallet.Entropy.from_english_mnemonics(MNEMONICS);
-    let wallet = Wallet.Bip44RootPrivateKey.recover(entropy, PASSWORD);
+    let wallet = Wallet.Bip44RootPrivateKey.recover(entropy, MNEMONIC_PASSWORD);
+    const master_key =  wallet.key().to_hex();
+    console.log('master key: ' + master_key);
+
+    // encrypt / decrypt example
+    {
+      const encoder = new TextEncoder();
+      const salt = Buffer.from(cryptoRandomString(2 * 32), 'hex');
+      const nonce = Buffer.from(cryptoRandomString(2 * 12), 'hex');
+      const encoded_key = new TextEncoder().encode(master_key);
+      const encrypted_key = Wallet.password_encrypt(SPENDING_PASSWORD, salt, nonce, encoded_key);
+      console.log('encrypted master key: ' + Buffer.from(encrypted_key).toString('hex'));
+
+      const decrypted_key = Wallet.password_decrypt(SPENDING_PASSWORD, encrypted_key);
+      const decrypted_key_hex = new TextDecoder().decode(Buffer.from(decrypted_key));
+      console.log('decrypted master key: ' + decrypted_key_hex);
+    }
 
     let account = wallet.bip44_account(Wallet.AccountIndex.new(0 | 0x80000000));
+    console.log('account private ' + account.key().to_hex());
     let account_public = account.public();
+    console.log('account public ' + account_public.key().to_hex());
 
     let key_prv = account.address_key(false, Wallet.AddressKeyIndex.new(0));
+    console.log('address public ' + key_prv.to_hex());
     let key_pub = account_public.address_key(false, Wallet.AddressKeyIndex.new(0));
+    console.log('address public ' + key_pub.to_hex());
 
     let address = key_pub.bootstrap_era_address(settings);
 

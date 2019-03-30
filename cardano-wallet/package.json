@@ -11,6 +11,7 @@
         "text-encoder": "0.0.4"
     },
     "dependencies": {
-        "cardano-wallet": "file:pkg"
+        "cardano-wallet": "file:pkg",
+        "crypto-random-string": "1.0.0"
     }
 }
