@@ -388,6 +388,10 @@ impl Bip44RootPrivateKey {
             derivation_scheme: self.derivation_scheme,
         }
     }
+
+    pub fn to_hex(&self) -> String {
+        self.key.to_hex()
+    }
 }
 
 #[wasm_bindgen]
@@ -414,6 +418,10 @@ impl Bip44AccountPrivate {
             .derive(self.derivation_scheme, if internal { 1 } else { 0 })
             .derive(self.derivation_scheme, index.0)
     }
+
+    pub fn to_hex(&self) -> String {
+        self.key.to_hex()
+    }
 }
 
 #[wasm_bindgen]
@@ -437,6 +445,10 @@ impl Bip44AccountPublic {
         self.key
             .derive(self.derivation_scheme, if internal { 1 } else { 0 })?
             .derive(self.derivation_scheme, index.0)
+    }
+
+    pub fn to_hex(&self) -> String {
+        self.key.to_hex()
     }
 }
 

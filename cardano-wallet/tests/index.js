@@ -22,11 +22,17 @@ Wallet
     let entropy = Wallet.Entropy.from_english_mnemonics(MNEMONICS);
     let wallet = Wallet.Bip44RootPrivateKey.recover(entropy, PASSWORD);
 
+    console.log('master key: ' + wallet.to_hex());
+
     let account = wallet.bip44_account(Wallet.AccountIndex.new(0 | 0x80000000));
+    console.log('account private ' + account.to_hex());
     let account_public = account.public();
+    console.log('account public ' + account_public.to_hex());
 
     let key_prv = account.address_key(false, Wallet.AddressKeyIndex.new(0));
+    console.log('address public ' + key_prv.to_hex());
     let key_pub = account_public.address_key(false, Wallet.AddressKeyIndex.new(0));
+    console.log('address public ' + key_pub.to_hex());
 
     let address = key_pub.bootstrap_era_address(settings);
 
