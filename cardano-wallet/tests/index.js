@@ -23,14 +23,15 @@ Wallet
 
     let entropy = Wallet.Entropy.from_english_mnemonics(MNEMONICS);
     let wallet = Wallet.Bip44RootPrivateKey.recover(entropy, MNEMONIC_PASSWORD);
-    console.log('master key: ' + wallet.to_hex());
+    const master_key =  wallet.key().to_hex();
+    console.log('master key: ' + master_key);
 
     // encrypt / decrypt example
     {
       const encoder = new TextEncoder();
       const salt = Buffer.from(cryptoRandomString(2 * 32), 'hex');
       const nonce = Buffer.from(cryptoRandomString(2 * 12), 'hex');
-      const encoded_key = new TextEncoder().encode(wallet.to_hex());
+      const encoded_key = new TextEncoder().encode(master_key);
       const encrypted_key = Wallet.password_encrypt(SPENDING_PASSWORD, salt, nonce, encoded_key);
       console.log('encrypted master key: ' + Buffer.from(encrypted_key).toString('hex'));
 
@@ -40,9 +41,9 @@ Wallet
     }
 
     let account = wallet.bip44_account(Wallet.AccountIndex.new(0 | 0x80000000));
-    console.log('account private ' + account.to_hex());
+    console.log('account private ' + account.key().to_hex());
     let account_public = account.public();
-    console.log('account public ' + account_public.to_hex());
+    console.log('account public ' + account_public.key().to_hex());
 
     let key_prv = account.address_key(false, Wallet.AddressKeyIndex.new(0));
     console.log('address public ' + key_prv.to_hex());

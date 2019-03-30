@@ -389,8 +389,8 @@ impl Bip44RootPrivateKey {
         }
     }
 
-    pub fn to_hex(&self) -> String {
-        self.key.to_hex()
+    pub fn key(&self) -> PrivateKey {
+        self.key.clone()
     }
 }
 
@@ -419,8 +419,8 @@ impl Bip44AccountPrivate {
             .derive(self.derivation_scheme, index.0)
     }
 
-    pub fn to_hex(&self) -> String {
-        self.key.to_hex()
+    pub fn key(&self) -> PrivateKey {
+        self.key.clone()
     }
 }
 
@@ -447,8 +447,8 @@ impl Bip44AccountPublic {
             .derive(self.derivation_scheme, index.0)
     }
 
-    pub fn to_hex(&self) -> String {
-        self.key.to_hex()
+    pub fn key(&self) -> PublicKey {
+        self.key.clone()
     }
 }
 
