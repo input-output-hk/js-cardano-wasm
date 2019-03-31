@@ -464,6 +464,10 @@ impl Bip44AccountPublic {
 pub struct DaedalusWallet(PrivateKey);
 #[wasm_bindgen]
 impl DaedalusWallet {
+    pub fn new(key: PrivateKey) -> DaedalusWallet {
+        DaedalusWallet(key)
+    }
+
     pub fn recover(entropy: &Entropy) -> Result<DaedalusWallet, JsValue> {
         let entropy_bytes = cbor_event::Value::Bytes(Vec::from(entropy.0.as_ref()));
         let entropy_cbor =
