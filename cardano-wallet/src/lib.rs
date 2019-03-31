@@ -107,6 +107,9 @@ impl Entropy {
     pub fn to_english_mnemonics(&self) -> String {
         self.to_mnemonics(&bip39::dictionary::ENGLISH)
     }
+    pub fn to_array(&self) -> Result<JsValue, JsValue> {
+        JsValue::from_serde(&self.0.as_ref()).map_err(|e| JsValue::from_str(&format! {"{:?}", e}))
+    }
 }
 impl Entropy {
     fn from_mnemonics<D: bip39::dictionary::Language>(
