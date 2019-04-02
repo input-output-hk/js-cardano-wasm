@@ -776,10 +776,6 @@ impl Transaction {
         let bytes = cbor!(&self.0).map_err(|e| JsValue::from_str(&format! {"{:?}", e}))?;
         Ok(util::hex::encode(&bytes))
     }
-    pub fn to_base58(&self) -> Result<String, JsValue> {
-        let bytes = cbor!(&self.0).map_err(|e| JsValue::from_str(&format! {"{:?}", e}))?;
-        Ok(util::base58::encode(&bytes))
-    }
 }
 
 /// a signed transaction, ready to be sent to the network.
@@ -796,10 +792,6 @@ impl SignedTransaction {
     pub fn to_hex(&self) -> Result<String, JsValue> {
         let bytes = cbor!(&self.0).map_err(|e| JsValue::from_str(&format! {"{:?}", e}))?;
         Ok(util::hex::encode(&bytes))
-    }
-    pub fn to_base58(&self) -> Result<String, JsValue> {
-        let bytes = cbor!(&self.0).map_err(|e| JsValue::from_str(&format! {"{:?}", e}))?;
-        Ok(util::base58::encode(&bytes))
     }
 }
 
