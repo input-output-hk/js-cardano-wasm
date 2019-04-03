@@ -951,7 +951,7 @@ impl TransactionFinalized {
             .map_err(|e| JsValue::from_str(&format! {"{:?}", e}))
     }
 
-    pub fn sign_redeemption(
+    pub fn sign_redemption(
         &mut self,
         blockchain_settings: &BlockchainSettings,
         key: &PrivateRedeemKey,
