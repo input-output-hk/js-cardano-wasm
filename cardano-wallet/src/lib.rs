@@ -951,6 +951,21 @@ impl TransactionFinalized {
             .map_err(|e| JsValue::from_str(&format! {"{:?}", e}))
     }
 
+    pub fn sign_redeemption(
+        &mut self,
+        blockchain_settings: &BlockchainSettings,
+        key: &PrivateRedeemKey,
+    ) -> Result<(), JsValue> {
+        let signature = tx::TxInWitness::new_redeem_pk(
+            blockchain_settings.protocol_magic,
+            &key.0,
+            &self.tx_id
+        );
+        self.finalized
+            .add_witness(signature)
+            .map_err(|e| JsValue::from_str(&format! {"{:?}", e}))
+    }
+
     pub fn finalize(self) -> Result<SignedTransaction, JsValue> {
         self.finalized
             .make_txaux()
