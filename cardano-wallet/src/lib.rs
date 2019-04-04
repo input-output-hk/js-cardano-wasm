@@ -685,6 +685,7 @@ impl Coin {
 #[wasm_bindgen]
 #[derive(Serialize, Deserialize, PartialEq, Eq, Debug)]
 pub struct TransactionId(tx::TxId);
+#[wasm_bindgen]
 impl TransactionId {
     pub fn to_hex(&self) -> String {
         format!("{}", self.0)
@@ -695,6 +696,8 @@ impl TransactionId {
             .map_err(|e| JsValue::from_str(&format! {"{:?}", e}))
             .map(TransactionId)
     }
+}
+impl TransactionId {
     fn convert(&self) -> tx::TxId {
         self.0.clone()
     }
@@ -769,8 +772,8 @@ impl TxOut {
 pub struct Transaction(tx::Tx);
 #[wasm_bindgen]
 impl Transaction {
-    pub fn id(&self) -> String {
-        format!("{}", self.0.id())
+    pub fn id(&self) -> TransactionId {
+        TransactionId(self.0.id())
     }
     pub fn to_json(&self) -> Result<JsValue, JsValue> {
         JsValue::from_serde(&self.0).map_err(|e| JsValue::from_str(&format! {"{:?}", e}))
