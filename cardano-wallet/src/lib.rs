@@ -18,6 +18,7 @@ use self::cardano::{
     address,
     bip::{bip39, bip44},
     coin, config, fee, hash, hdpayload, hdwallet, paperwallet, tx, txbuild, txutils, util, wallet,
+    wallet::scheme::SelectionPolicy,
 };
 
 /// setting of the blockchain
@@ -1000,6 +1001,85 @@ impl TransactionFinalized {
             .make_txaux()
             .map_err(|e| JsValue::from_str(&format! {"{:?}", e}))
             .map(SignedTransaction)
+    }
+}
+
+/* ************************************************************************* *
+ *                         Tooling for Input selections                      *
+ * ************************************************************************* *
+ *
+ * Help the user perform automatic input selection
+ */
+
+#[wasm_bindgen]
+pub struct InputSelection {
+    scheme: SelectionPolicy,
+}
+#[wasm_bindgen]
+impl InputSelection {
+    pub fn first_match_first() -> InputSelection {
+        InputSelection {
+            scheme: SelectionPolicy::FirstMatchFirst,
+        }
+    }
+
+    pub fn largest_first() -> InputSelection {
+        InputSelection {
+            scheme: SelectionPolicy::LargestFirst,
+        }
+    }
+
+    pub fn blackjack(dust_threshold: Coin) -> InputSelection {
+        InputSelection {
+            scheme: SelectionPolicy::Blackjack(dust_threshold.0),
+        }
+    }
+
+    pub fn select_inputs(
+        &self,
+        fee_algorithm: &LinearFeeAlgorithm,
+        output_policy: &OutputPolicy,
+        inputs: Vec<(TxoPointer, TxOut)>,
+        outputs: Vec<TxOut>,
+    ) -> Result<(), JsValue> {
+        use self::cardano::{
+            input_selection::{self, InputSelectionAlgorithm},
+            txutils::Input,
+        };
+
+        let inputs: Vec<Input<()>> = inputs
+            .into_iter()
+            .map(|(txoptr, output)| Input {
+                ptr: txoptr.convert(),
+                value: output.convert(),
+                addressing: (), // We ignore here
+            })
+            .collect();
+        let outputs: Vec<tx::TxOut> = outputs.into_iter().map(|output| output.convert()).collect();
+
+        let selection_result = match self.scheme {
+            SelectionPolicy::FirstMatchFirst => {
+                let mut alg = input_selection::HeadFirst::from(inputs);
+                alg.compute(&fee_algorithm.0, outputs, &output_policy.0)
+                    .map_err(|e| JsValue::from_str(&format! {"{:?}", e}))?
+            }
+            SelectionPolicy::LargestFirst => {
+                let mut alg = input_selection::LargestFirst::from(inputs);
+                alg.compute(&fee_algorithm.0, outputs, &output_policy.0)
+                    .map_err(|e| JsValue::from_str(&format! {"{:?}", e}))?
+            }
+            SelectionPolicy::Blackjack(dust) => {
+                let mut alg = input_selection::Blackjack::new(dust, inputs);
+                alg.compute(&fee_algorithm.0, outputs, &output_policy.0)
+                    .map_err(|e| JsValue::from_str(&format! {"{:?}", e}))?
+            }
+        };
+
+        let selected_inputs = selection_result.selected_inputs;
+        let estimated_fees = selection_result.estimated_fees;
+        let estimated_change = selection_result.estimated_change;
+
+        Ok(())
     }
 }
 
