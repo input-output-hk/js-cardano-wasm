@@ -792,6 +792,11 @@ impl SignedTransaction {
     pub fn to_json(&self) -> Result<JsValue, JsValue> {
         JsValue::from_serde(&self.0).map_err(|e| JsValue::from_str(&format! {"{:?}", e}))
     }
+    pub fn from_bytes(bytes: &[u8]) -> SignedTransaction {
+        let mut raw = cbor_event::de::Deserializer::from(std::io::Cursor::new(bytes));
+        let _txaux: tx::TxAux = cbor_event::de::Deserialize::deserialize(&mut raw).unwrap();
+        SignedTransaction(_txaux)
+    }
     pub fn to_hex(&self) -> Result<String, JsValue> {
         let bytes = cbor!(&self.0).map_err(|e| JsValue::from_str(&format! {"{:?}", e}))?;
         Ok(util::hex::encode(&bytes))
