@@ -18,6 +18,7 @@ use self::cardano::{
     address,
     bip::{bip39, bip44},
     coin, config, fee, hash, hdpayload, hdwallet, paperwallet, tx, txbuild, txutils, util, wallet,
+    wallet::scheme::SelectionPolicy,
 };
 
 /// setting of the blockchain
@@ -698,7 +699,7 @@ impl Coin {
 }
 
 #[wasm_bindgen]
-#[derive(Serialize, Deserialize, PartialEq, Eq, Debug)]
+#[derive(Serialize, Deserialize, PartialEq, Eq, Debug, Clone)]
 pub struct TransactionId(tx::TxId);
 #[wasm_bindgen]
 impl TransactionId {
@@ -719,13 +720,19 @@ impl TransactionId {
 }
 
 #[wasm_bindgen]
-#[derive(Serialize, Deserialize, PartialEq, Eq, Debug)]
+#[derive(Serialize, Deserialize, PartialEq, Eq, Debug, Clone)]
 pub struct TxoPointer {
     id: TransactionId,
     index: u32,
 }
 #[wasm_bindgen]
 impl TxoPointer {
+    pub fn new(id: &TransactionId, index: u32) -> TxoPointer {
+        TxoPointer {
+            id: id.clone(),
+            index
+        }
+    }
     /// serialize into a JsValue object
     pub fn to_json(&self) -> Result<JsValue, JsValue> {
         JsValue::from_serde(self).map_err(|e| JsValue::from_str(&format! {"{:?}", e}))
@@ -739,6 +746,12 @@ impl TxoPointer {
     }
 }
 impl TxoPointer {
+    fn from(tx: tx::TxoPointer) -> Self {
+        TxoPointer {
+            id: TransactionId(tx.id),
+            index: tx.index,
+        }
+    }
     fn convert(&self) -> tx::TxoPointer {
         tx::TxoPointer {
             id: self.id.convert(),
@@ -755,6 +768,13 @@ pub struct TxOut {
 }
 #[wasm_bindgen]
 impl TxOut {
+    pub fn new(address: &Address, value: &Coin) -> TxOut {
+        TxOut {
+            address: address.clone(),
+            value: value.clone()
+        }
+    }
+
     /// serialize into a JsValue object
     pub fn to_json(&self) -> Result<JsValue, JsValue> {
         JsValue::from_serde(self).map_err(|e| JsValue::from_str(&format! {"{:?}", e}))
@@ -1034,6 +1054,149 @@ impl TransactionFinalized {
             .make_txaux()
             .map_err(|e| JsValue::from_str(&format! {"{:?}", e}))
             .map(SignedTransaction)
+    }
+}
+
+/* ************************************************************************* *
+ *                         Tooling for Input selections                      *
+ * ************************************************************************* *
+ *
+ * Help the user perform automatic input selection
+ */
+
+#[wasm_bindgen]
+#[derive(Serialize, Deserialize, Clone)]
+pub struct TxInput {
+    ptr: TxoPointer,
+    value: TxOut,
+}
+#[wasm_bindgen]
+impl TxInput {
+    pub fn new(ptr: &TxoPointer, value: &TxOut) -> TxInput {
+        TxInput {
+            ptr: ptr.clone(),
+            value: value.clone()
+        }
+    }
+    pub fn to_json(&self) -> Result<JsValue, JsValue> {
+        JsValue::from_serde(self).map_err(|e| JsValue::from_str(&format! {"{:?}", e}))
+    }
+    pub fn from_json(value: JsValue) -> Result<TxInput, JsValue> {
+        value
+            .into_serde()
+            .map_err(|e| JsValue::from_str(&format! {"{:?}", e}))
+    }
+}
+
+#[wasm_bindgen]
+pub struct InputSelectionBuilder{
+    inputs: Vec<TxInput>,
+    outputs: Vec<TxOut>,
+    scheme: SelectionPolicy,
+}
+#[wasm_bindgen]
+impl InputSelectionBuilder {
+   pub fn first_match_first() -> InputSelectionBuilder {
+        InputSelectionBuilder {
+            scheme: SelectionPolicy::FirstMatchFirst,
+            inputs: Vec::new(),
+            outputs: Vec::new(),
+        }
+    }
+    pub fn largest_first() -> InputSelectionBuilder {
+        InputSelectionBuilder {
+            scheme: SelectionPolicy::LargestFirst,
+            inputs: Vec::new(),
+            outputs: Vec::new(),
+        }
+    }
+    pub fn blackjack(dust_threshold: Coin) -> InputSelectionBuilder {
+        InputSelectionBuilder {
+            scheme: SelectionPolicy::Blackjack(dust_threshold.0),
+            inputs: Vec::new(),
+            outputs: Vec::new(),
+        }
+    }
+
+
+    pub fn add_input(&mut self, tx_input: &TxInput) -> Result<(), JsValue> {
+        self.inputs.push(tx_input.clone());
+        Ok(())
+    }
+    pub fn add_output(&mut self, output: &TxOut) -> Result<(), JsValue> {
+        self.outputs.push(output.clone());
+        Ok(())
+    }
+    
+    pub fn select_inputs(
+        &self,
+        fee_algorithm: &LinearFeeAlgorithm,
+        output_policy: &OutputPolicy
+    ) -> Result<InputSelectionResult, JsValue> {
+        use self::cardano::input_selection::{self, InputSelectionAlgorithm};
+
+        // convert inputs & outputs to non-WASM intput & output used by input selection
+        let inputs: Vec<txutils::Input<()>> = self.inputs
+            .iter()
+            .map(|input| txutils::Input {
+                ptr: input.ptr.convert(),
+                value: input.value.convert(),
+                addressing: (), // We ignore here
+            })
+            .collect();
+        let outputs: Vec<tx::TxOut> = self.outputs.iter().map(|output| output.convert()).collect();
+
+        let selection_result = match self.scheme {
+            SelectionPolicy::FirstMatchFirst => {
+                let mut alg = input_selection::HeadFirst::from(inputs);
+                alg.compute(&fee_algorithm.0, outputs, &output_policy.0)
+                    .map_err(|e| JsValue::from_str(&format! {"{:?}", e}))?
+            }
+            SelectionPolicy::LargestFirst => {
+                let mut alg = input_selection::LargestFirst::from(inputs);
+                alg.compute(&fee_algorithm.0, outputs, &output_policy.0)
+                    .map_err(|e| JsValue::from_str(&format! {"{:?}", e}))?
+            }
+            SelectionPolicy::Blackjack(dust) => {
+                let mut alg = input_selection::Blackjack::new(dust, inputs);
+                alg.compute(&fee_algorithm.0, outputs, &output_policy.0)
+                    .map_err(|e| JsValue::from_str(&format! {"{:?}", e}))?
+            }
+        };
+
+        let selected_inputs = selection_result.selected_inputs;
+        let estimated_fees = selection_result.estimated_fees;
+        let estimated_change = selection_result.estimated_change;
+
+        Ok(InputSelectionResult {
+            selected_inputs: 
+                selected_inputs
+                .into_iter()
+                .map(|input| TxoPointer::from(input.ptr))
+                .collect(),
+            estimated_fees: Coin(estimated_fees.to_coin()),
+            estimated_change: Coin(estimated_change.unwrap_or(0.into())),
+        })
+    }
+}
+
+#[wasm_bindgen]
+pub struct InputSelectionResult{
+    estimated_fees: Coin,
+    estimated_change: Coin,
+    selected_inputs: Vec<TxoPointer>,
+}
+#[wasm_bindgen]
+impl InputSelectionResult {
+    
+    pub fn is_input(&self, txo_pointer: &TxoPointer) -> bool {
+        self.selected_inputs.contains(txo_pointer)
+    }
+    pub fn estimated_fees(&self) -> Coin {
+        self.estimated_fees
+    }
+    pub fn estimated_change(&self) -> Coin {
+        self.estimated_change
     }
 }
 
