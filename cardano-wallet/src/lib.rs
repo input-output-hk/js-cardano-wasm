@@ -309,6 +309,21 @@ impl Signature {
     }
 }
 
+#[wasm_bindgen]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TransactionSignature(hdwallet::Signature<(tx::Tx)>);
+#[wasm_bindgen]
+impl TransactionSignature {
+    pub fn from_hex(hex: &str) -> Result<TransactionSignature, JsValue> {
+        hdwallet::Signature::from_hex(hex)
+            .map_err(|e| JsValue::from_str(&format! {"{:?}", e}))
+            .map(TransactionSignature)
+    }
+    pub fn to_hex(&self) -> String {
+        format!("{}", self.0)
+    }
+}
+
 /* ************************************************************************* *
  *                     BIP44 style Wallet (Icarus/Yoroi/Rust)                *
  * ************************************************************************* *
@@ -951,6 +966,20 @@ impl Witness {
             blockchain_settings.protocol_magic,
             &signing_key.0,
             &transaction_id.0,
+        );
+
+        Witness(witness)
+    }
+
+    /// used to add signatures created by hardware wallets where we don't have access
+    /// to the private key
+    pub fn from_external(
+        key: &PublicKey,
+        signature: &TransactionSignature,
+    ) -> Witness {
+        let witness = tx::TxInWitness::PkWitness(
+            key.0.clone(),
+            signature.0.clone()
         );
 
         Witness(witness)
