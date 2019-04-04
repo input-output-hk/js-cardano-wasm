@@ -727,6 +727,12 @@ pub struct TxoPointer {
 }
 #[wasm_bindgen]
 impl TxoPointer {
+    pub fn new(id: &TransactionId, index: u32) -> TxoPointer {
+        TxoPointer {
+            id: id.clone(),
+            index
+        }
+    }
     /// serialize into a JsValue object
     pub fn to_json(&self) -> Result<JsValue, JsValue> {
         JsValue::from_serde(self).map_err(|e| JsValue::from_str(&format! {"{:?}", e}))
@@ -762,6 +768,13 @@ pub struct TxOut {
 }
 #[wasm_bindgen]
 impl TxOut {
+    pub fn new(address: &Address, value: &Coin) -> TxOut {
+        TxOut {
+            address: address.clone(),
+            value: value.clone()
+        }
+    }
+
     /// serialize into a JsValue object
     pub fn to_json(&self) -> Result<JsValue, JsValue> {
         JsValue::from_serde(self).map_err(|e| JsValue::from_str(&format! {"{:?}", e}))
@@ -1056,6 +1069,23 @@ impl TransactionFinalized {
 pub struct TxInput {
     ptr: TxoPointer,
     value: TxOut,
+}
+#[wasm_bindgen]
+impl TxInput {
+    pub fn new(ptr: &TxoPointer, value: &TxOut) -> TxInput {
+        TxInput {
+            ptr: ptr.clone(),
+            value: value.clone()
+        }
+    }
+    pub fn to_json(&self) -> Result<JsValue, JsValue> {
+        JsValue::from_serde(self).map_err(|e| JsValue::from_str(&format! {"{:?}", e}))
+    }
+    pub fn from_json(value: JsValue) -> Result<TxInput, JsValue> {
+        value
+            .into_serde()
+            .map_err(|e| JsValue::from_str(&format! {"{:?}", e}))
+    }
 }
 
 #[wasm_bindgen]
