@@ -920,6 +920,39 @@ impl TransactionBuilder {
 }
 
 #[wasm_bindgen]
+pub struct Witness(tx::TxInWitness);
+
+#[wasm_bindgen]
+impl Witness {
+    pub fn new_extended_key(
+        blockchain_settings: &BlockchainSettings,
+        signing_key: &PrivateKey,
+        transaction_id: &TransactionId,
+    ) -> Witness {
+        let witness = tx::TxInWitness::new_extended_pk(
+            blockchain_settings.protocol_magic,
+            &signing_key.0,
+            &transaction_id.0,
+        );
+        Witness(witness)
+    }
+
+    pub fn new_redeem_key(
+        blockchain_settings: &BlockchainSettings,
+        signing_key: &PrivateRedeemKey,
+        transaction_id: &TransactionId,
+    ) -> Witness {
+        let witness = tx::TxInWitness::new_redeem_pk(
+            blockchain_settings.protocol_magic,
+            &signing_key.0,
+            &transaction_id.0,
+        );
+
+        Witness(witness)
+    }
+}
+
+#[wasm_bindgen]
 pub struct TransactionFinalized {
     tx_id: tx::TxId,
     finalized: txbuild::TxFinalized,
@@ -939,6 +972,8 @@ impl TransactionFinalized {
     ///
     /// The signature must be added one by one in the same order the inputs have
     /// been added.
+    ///
+    /// Deprecated: use `add_witness` instead.
     pub fn sign(
         &mut self,
         blockchain_settings: &BlockchainSettings,
@@ -951,6 +986,12 @@ impl TransactionFinalized {
         );
         self.finalized
             .add_witness(signature)
+            .map_err(|e| JsValue::from_str(&format! {"{:?}", e}))
+    }
+
+    pub fn add_witness(&mut self, witness: Witness) -> Result<(), JsValue> {
+        self.finalized
+            .add_witness(witness.0)
             .map_err(|e| JsValue::from_str(&format! {"{:?}", e}))
     }
 
