@@ -684,7 +684,7 @@ impl Coin {
 }
 
 #[wasm_bindgen]
-#[derive(Serialize, Deserialize, PartialEq, Eq, Debug)]
+#[derive(Serialize, Deserialize, PartialEq, Eq, Debug, Clone)]
 pub struct TransactionId(tx::TxId);
 #[wasm_bindgen]
 impl TransactionId {
@@ -705,7 +705,7 @@ impl TransactionId {
 }
 
 #[wasm_bindgen]
-#[derive(Serialize, Deserialize, PartialEq, Eq, Debug)]
+#[derive(Serialize, Deserialize, PartialEq, Eq, Debug, Clone)]
 pub struct TxoPointer {
     id: TransactionId,
     index: u32,
@@ -725,6 +725,12 @@ impl TxoPointer {
     }
 }
 impl TxoPointer {
+    fn from(tx: tx::TxoPointer) -> Self {
+        TxoPointer {
+            id: TransactionId(tx.id),
+            index: tx.index,
+        }
+    }
     fn convert(&self) -> tx::TxoPointer {
         tx::TxoPointer {
             id: self.id.convert(),
@@ -754,6 +760,12 @@ impl TxOut {
     }
 }
 impl TxOut {
+    fn from(tx: tx::TxOut) -> Self {
+        TxOut {
+            address: Address(tx.address),
+            value: Coin(tx.value),
+        }
+    }
     fn convert(&self) -> tx::TxOut {
         tx::TxOut {
             address: self.address.0.clone(),
@@ -1012,6 +1024,67 @@ impl TransactionFinalized {
  */
 
 #[wasm_bindgen]
+#[derive(Clone)]
+pub struct Input {
+    txopointer: TxoPointer,
+    output: TxOut,
+}
+
+#[wasm_bindgen]
+pub struct Inputs(Vec<Input>);
+#[wasm_bindgen]
+impl Inputs {
+    #[wasm_bindgen(constructor)]
+    pub fn new() -> Inputs {
+        Inputs(Vec::new())
+    }
+    pub fn push(&mut self, input: Input) {
+        self.0.push(input)
+    }
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+    pub fn get(&self, index: usize) -> Result<Input, JsValue> {
+        self.0
+            .get(index)
+            .cloned()
+            .ok_or(format!(
+                "Out of bound, {} > array len {}",
+                index,
+                self.0.len()
+            ))
+            .map_err(|s| JsValue::from_str(&s))
+    }
+}
+
+#[wasm_bindgen]
+pub struct Outputs(Vec<TxOut>);
+#[wasm_bindgen]
+impl Outputs {
+    #[wasm_bindgen(constructor)]
+    pub fn new() -> Outputs {
+        Outputs(Vec::new())
+    }
+    pub fn push(&mut self, output: TxOut) {
+        self.0.push(output)
+    }
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+    pub fn get(&self, index: usize) -> Result<TxOut, JsValue> {
+        self.0
+            .get(index)
+            .cloned()
+            .ok_or(format!(
+                "Out of bound, {} > array len {}",
+                index,
+                self.0.len()
+            ))
+            .map_err(|s| JsValue::from_str(&s))
+    }
+}
+
+#[wasm_bindgen]
 pub struct InputSelection {
     scheme: SelectionPolicy,
 }
@@ -1039,23 +1112,21 @@ impl InputSelection {
         &self,
         fee_algorithm: &LinearFeeAlgorithm,
         output_policy: &OutputPolicy,
-        inputs: Vec<(TxoPointer, TxOut)>,
-        outputs: Vec<TxOut>,
-    ) -> Result<(), JsValue> {
-        use self::cardano::{
-            input_selection::{self, InputSelectionAlgorithm},
-            txutils::Input,
-        };
+        inputs: &Inputs,
+        outputs: &Outputs,
+    ) -> Result<InputSelectionResult, JsValue> {
+        use self::cardano::input_selection::{self, InputSelectionAlgorithm};
 
-        let inputs: Vec<Input<()>> = inputs
-            .into_iter()
-            .map(|(txoptr, output)| Input {
-                ptr: txoptr.convert(),
-                value: output.convert(),
+        let inputs: Vec<txutils::Input<()>> = inputs
+            .0
+            .iter()
+            .map(|input| txutils::Input {
+                ptr: input.txopointer.convert(),
+                value: input.output.convert(),
                 addressing: (), // We ignore here
             })
             .collect();
-        let outputs: Vec<tx::TxOut> = outputs.into_iter().map(|output| output.convert()).collect();
+        let outputs: Vec<tx::TxOut> = outputs.0.iter().map(|output| output.convert()).collect();
 
         let selection_result = match self.scheme {
             SelectionPolicy::FirstMatchFirst => {
@@ -1079,8 +1150,27 @@ impl InputSelection {
         let estimated_fees = selection_result.estimated_fees;
         let estimated_change = selection_result.estimated_change;
 
-        Ok(())
+        Ok(InputSelectionResult {
+            selected_inputs: Inputs(
+                selected_inputs
+                    .into_iter()
+                    .map(|input| Input {
+                        txopointer: TxoPointer::from(input.ptr),
+                        output: TxOut::from(input.value),
+                    })
+                    .collect(),
+            ),
+            estimated_fees: Coin(estimated_fees.to_coin()),
+            estimated_change: Coin(estimated_change.unwrap_or(0.into())),
+        })
     }
+}
+
+#[wasm_bindgen]
+pub struct InputSelectionResult {
+    selected_inputs: Inputs,
+    estimated_fees: Coin,
+    estimated_change: Coin,
 }
 
 /* ************************************************************************* *
