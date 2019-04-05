@@ -1021,6 +1021,10 @@ impl TransactionFinalized {
         }
     }
 
+    pub fn id(&self) -> TransactionId {
+        TransactionId(self.tx_id)
+    }
+
     /// sign the inputs of the transaction (i.e. unlock the funds the input are
     /// referring to).
     ///
