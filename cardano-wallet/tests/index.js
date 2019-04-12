@@ -28,15 +28,14 @@ Wallet
 
     // encrypt / decrypt example
     {
-      const encoder = new TextEncoder();
       const salt = Buffer.from(cryptoRandomString(2 * 32), 'hex');
       const nonce = Buffer.from(cryptoRandomString(2 * 12), 'hex');
-      const encoded_key = new TextEncoder().encode(master_key);
+      const encoded_key = Buffer.from(master_key, 'hex');
       const encrypted_key = Wallet.password_encrypt(SPENDING_PASSWORD, salt, nonce, encoded_key);
       console.log('encrypted master key: ' + Buffer.from(encrypted_key).toString('hex'));
 
       const decrypted_key = Wallet.password_decrypt(SPENDING_PASSWORD, encrypted_key);
-      const decrypted_key_hex = new TextDecoder().decode(Buffer.from(decrypted_key));
+      const decrypted_key_hex =Buffer.from(decrypted_key).toString('hex');
       console.log('decrypted master key: ' + decrypted_key_hex);
     }
 
