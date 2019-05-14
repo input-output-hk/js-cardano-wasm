@@ -432,10 +432,13 @@ impl Bip44AccountPrivate {
             derivation_scheme: self.derivation_scheme,
         }
     }
-    pub fn address_key(&self, internal: bool, index: AddressKeyIndex) -> PrivateKey {
-        self.key
-            .derive(self.derivation_scheme, if internal { 1 } else { 0 })
-            .derive(self.derivation_scheme, index.0)
+    pub fn bip44_chain(&self, internal: bool) -> Bip44ChainPrivate {
+        Bip44ChainPrivate {
+            key: self
+                .key
+                .derive(self.derivation_scheme, if internal { 1 } else { 0 }),
+            derivation_scheme: self.derivation_scheme,
+        }
     }
 
     pub fn key(&self) -> PrivateKey {
@@ -456,13 +459,73 @@ impl Bip44AccountPublic {
             derivation_scheme: derivation_scheme,
         }
     }
-    pub fn address_key(
+    pub fn bip44_chain(
         &self,
         internal: bool,
+    ) -> Result<Bip44ChainPublic, JsValue> {
+        self
+            .key
+            .derive(self.derivation_scheme, if internal { 1 } else { 0 })
+            .map(|key: PublicKey|
+                Bip44ChainPublic {
+                    key,
+                    derivation_scheme: self.derivation_scheme,
+                }
+            )
+    }
+
+    pub fn key(&self) -> PublicKey {
+        self.key.clone()
+    }
+}
+
+#[wasm_bindgen]
+pub struct Bip44ChainPrivate {
+    key: PrivateKey,
+    derivation_scheme: DerivationScheme,
+}
+#[wasm_bindgen]
+impl Bip44ChainPrivate {
+    pub fn new(key: PrivateKey, derivation_scheme: DerivationScheme) -> Bip44ChainPrivate {
+        Bip44ChainPrivate {
+            key: key,
+            derivation_scheme: derivation_scheme,
+        }
+    }
+    pub fn public(&self) -> Bip44ChainPublic {
+        Bip44ChainPublic {
+            key: self.key.public(),
+            derivation_scheme: self.derivation_scheme,
+        }
+    }
+    pub fn address_key(&self, index: AddressKeyIndex) -> PrivateKey {
+        self.key
+            .derive(self.derivation_scheme, index.0)
+    }
+
+    pub fn key(&self) -> PrivateKey {
+        self.key.clone()
+    }
+}
+
+#[wasm_bindgen]
+pub struct Bip44ChainPublic {
+    key: PublicKey,
+    derivation_scheme: DerivationScheme,
+}
+#[wasm_bindgen]
+impl Bip44ChainPublic {
+    pub fn new(key: PublicKey, derivation_scheme: DerivationScheme) -> Bip44ChainPublic {
+        Bip44ChainPublic {
+            key: key,
+            derivation_scheme: derivation_scheme,
+        }
+    }
+    pub fn address_key(
+        &self,
         index: AddressKeyIndex,
     ) -> Result<PublicKey, JsValue> {
         self.key
-            .derive(self.derivation_scheme, if internal { 1 } else { 0 })?
             .derive(self.derivation_scheme, index.0)
     }
 
@@ -959,9 +1022,13 @@ impl TransactionBuilder {
     }
 }
 
+/// sign the inputs of the transaction (i.e. unlock the funds the input are
+/// referring to).
+///
+/// The signature must be added one by one in the same order the inputs have
+/// been added.
 #[wasm_bindgen]
 pub struct Witness(tx::TxInWitness);
-
 #[wasm_bindgen]
 impl Witness {
     pub fn new_extended_key(
@@ -1023,28 +1090,6 @@ impl TransactionFinalized {
 
     pub fn id(&self) -> TransactionId {
         TransactionId(self.tx_id)
-    }
-
-    /// sign the inputs of the transaction (i.e. unlock the funds the input are
-    /// referring to).
-    ///
-    /// The signature must be added one by one in the same order the inputs have
-    /// been added.
-    ///
-    /// Deprecated: use `add_witness` instead.
-    pub fn sign(
-        &mut self,
-        blockchain_settings: &BlockchainSettings,
-        key: &PrivateKey,
-    ) -> Result<(), JsValue> {
-        let signature = tx::TxInWitness::new_extended_pk(
-            blockchain_settings.protocol_magic,
-            &key.0,
-            &self.tx_id,
-        );
-        self.finalized
-            .add_witness(signature)
-            .map_err(|e| JsValue::from_str(&format! {"{:?}", e}))
     }
 
     pub fn add_witness(&mut self, witness: Witness) -> Result<(), JsValue> {
