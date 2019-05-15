@@ -44,7 +44,8 @@ let account = wallet.bip44_account(Cardano.AccountIndex.new(0 | 0x80000000));
 let account_public = account.public();
 
 // create an address
-let key_pub = account_public.address_key(false, Cardano.AddressKeyIndex.new(0));
+let chain_pub = account_public.bip44_chain(false);
+let key_pub = chain_pub.address_key(Cardano.AddressKeyIndex.new(0));
 let address = key_pub.bootstrap_era_address(settings);
 
 console.log("Address m/bip44/ada/'0/0/0", address.to_base58());
@@ -120,7 +121,12 @@ You need to make sure:
 let transaction_finalizer = new Wallet.TransactionFinalized(transaction);
 
 for (let index = 0; index < inputs.length; index++) {
-    transaction_finalizer.sign(settings, key_prv);
+    const witness = Wallet.Witness.new_extended_key(
+        settings,
+        key_prv,
+        transaction_finalizer.id()
+    );
+    transaction_finalizer.add_witness(witness);
 }
 
 // at this stage the transaction is ready to be sent

@@ -44,9 +44,11 @@ Wallet
     let account_public = account.public();
     console.log('account public ' + account_public.key().to_hex());
 
-    let key_prv = account.address_key(false, Wallet.AddressKeyIndex.new(0));
+    let chain_prv = account.bip44_chain(false);
+    let key_prv = chain_prv.address_key(Wallet.AddressKeyIndex.new(0));
     console.log('address public ' + key_prv.to_hex());
-    let key_pub = account_public.address_key(false, Wallet.AddressKeyIndex.new(0));
+    let chain_pub = account_public.bip44_chain(false);
+    let key_pub = chain_pub.address_key(Wallet.AddressKeyIndex.new(0));
     console.log('address public ' + key_pub.to_hex());
 
     let address = key_pub.bootstrap_era_address(settings);
@@ -104,7 +106,12 @@ Wallet
     console.log("transaction finalizer built", transaction_finalizer);
 
     for (let index = 0; index < inputs.length; index++) {
-      transaction_finalizer.sign(settings, key_prv);
+      const witness = Wallet.Witness.new_extended_key(
+        settings,
+        key_prv,
+        transaction_finalizer.id()
+      );
+      transaction_finalizer.add_witness(witness);
       console.log("signature ", index, "added");
 
     }
