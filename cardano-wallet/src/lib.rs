@@ -867,7 +867,6 @@ impl TxOut {
 /// 2. sign the transaction on the other/thread/machines/cold-wallet...;
 ///
 #[wasm_bindgen]
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Transaction(tx::Tx);
 #[wasm_bindgen]
 impl Transaction {
@@ -880,6 +879,7 @@ impl Transaction {
     pub fn from_json(value: JsValue) -> Result<Transaction, JsValue> {
         value
             .into_serde()
+            .map(Transaction)
             .map_err(|e| JsValue::from_str(&format! {"{:?}", e}))
     }
     pub fn clone(&self) -> Transaction {
@@ -893,7 +893,6 @@ impl Transaction {
 
 /// a signed transaction, ready to be sent to the network.
 #[wasm_bindgen]
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct SignedTransaction(tx::TxAux);
 #[wasm_bindgen]
 impl SignedTransaction {
@@ -906,6 +905,7 @@ impl SignedTransaction {
     pub fn from_json(value: JsValue) -> Result<SignedTransaction, JsValue> {
         value
             .into_serde()
+            .map(SignedTransaction)
             .map_err(|e| JsValue::from_str(&format! {"{:?}", e}))
     }
     pub fn from_bytes(bytes: &[u8]) -> Result<SignedTransaction, JsValue> {
