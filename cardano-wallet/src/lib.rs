@@ -206,13 +206,13 @@ impl PrivateKey {
 
 /// The public key associated to a given private key.
 ///
-/// It is not possible to sign (and then spend) with a private key.
+/// It is not possible to sign (and then spend) with a public key.
 /// However it is possible to verify a Signature.
 ///
 /// # Security Consideration
 ///
-/// * it is rather harmless to leak a public key, in the worst case
-///   only the privacy is leaked;
+/// * Leaking a public key leads to privacy loss and in case of bip44 may compromise your wallet
+///  (see hardened indices for more details)
 ///
 #[wasm_bindgen]
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -876,6 +876,15 @@ impl Transaction {
     pub fn to_json(&self) -> Result<JsValue, JsValue> {
         JsValue::from_serde(&self.0).map_err(|e| JsValue::from_str(&format! {"{:?}", e}))
     }
+    pub fn from_json(value: JsValue) -> Result<Transaction, JsValue> {
+        value
+            .into_serde()
+            .map(Transaction)
+            .map_err(|e| JsValue::from_str(&format! {"{:?}", e}))
+    }
+    pub fn clone(&self) -> Transaction {
+        Transaction(self.0.clone())
+    }
     pub fn to_hex(&self) -> Result<String, JsValue> {
         let bytes = cbor!(&self.0).map_err(|e| JsValue::from_str(&format! {"{:?}", e}))?;
         Ok(util::hex::encode(&bytes))
@@ -892,6 +901,12 @@ impl SignedTransaction {
     }
     pub fn to_json(&self) -> Result<JsValue, JsValue> {
         JsValue::from_serde(&self.0).map_err(|e| JsValue::from_str(&format! {"{:?}", e}))
+    }
+    pub fn from_json(value: JsValue) -> Result<SignedTransaction, JsValue> {
+        value
+            .into_serde()
+            .map(SignedTransaction)
+            .map_err(|e| JsValue::from_str(&format! {"{:?}", e}))
     }
     pub fn from_bytes(bytes: &[u8]) -> Result<SignedTransaction, JsValue> {
         let mut raw = cbor_event::de::Deserializer::from(std::io::Cursor::new(bytes));
