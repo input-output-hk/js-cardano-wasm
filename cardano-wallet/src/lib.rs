@@ -550,6 +550,10 @@ impl DaedalusWallet {
         DaedalusWallet(key)
     }
 
+    pub fn master_key(&self) -> PrivateKey {
+        self.0.clone()
+    }
+
     pub fn recover(entropy: &Entropy) -> Result<DaedalusWallet, JsValue> {
         let entropy_bytes = cbor_event::Value::Bytes(Vec::from(entropy.0.as_ref()));
         let entropy_cbor =
