@@ -684,7 +684,7 @@ impl serde::Serialize for Coin {
     where
         S: serde::Serializer,
     {
-        let v: u64 = *self.0;
+        let v = u64::from(self.0);
         serializer.serialize_str(&format!("{}", v))
     }
 }
@@ -743,13 +743,13 @@ impl Coin {
     }
 
     pub fn ada(&self) -> u32 {
-        let v = *self.0 / 1_000_000;
+        let v = u64::from(self.0) / 1_000_000;
         assert!(v < 0xFFFF_FFFF);
         v as u32
     }
 
     pub fn lovelace(&self) -> u32 {
-        (*self.0 % 1_000_000) as u32
+        (u64::from(self.0) % 1_000_000) as u32
     }
 
     pub fn add(&self, other: &Coin) -> Result<Coin, JsValue> {
