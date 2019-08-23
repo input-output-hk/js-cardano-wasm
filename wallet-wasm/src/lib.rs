@@ -1058,6 +1058,8 @@ struct GenAddressesInput {
     account: Bip44Account,
     address_type: bip44::AddrType,
     indices: Vec<u32>,
+    // For backwards compatability, absence of this field means mainnet
+    protocol_magic: Option<cardano::config::ProtocolMagic>,
 }
 
 #[no_mangle]
@@ -1072,6 +1074,10 @@ pub extern "C" fn xwallet_addresses(
         output_ptr,
         account.change(input.account.derivation_scheme, input.address_type)
     );
+    let network_magic = match input.protocol_magic {
+        Some(pm) => cardano::config::NetworkMagic::from(pm),
+        None => default_network_magic(),
+    };
 
     let mut addresses: Vec<address::ExtendedAddr> = Vec::with_capacity(input.indices.len());
     for index in input.indices.into_iter() {
@@ -1079,7 +1085,7 @@ pub extern "C" fn xwallet_addresses(
             output_ptr,
             changelevel.index(input.account.derivation_scheme, index)
         );
-        let addr = address::ExtendedAddr::new_simple(*xpub, default_network_magic());
+        let addr = address::ExtendedAddr::new_simple(*xpub, network_magic);
         addresses.push(addr);
     }
     jrpc_ok!(output_ptr, addresses)
