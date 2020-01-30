@@ -921,10 +921,6 @@ impl SignedTransaction {
         let bytes = cbor!(&self.0).map_err(|e| JsValue::from_str(&format! {"{:?}", e}))?;
         Ok(util::hex::encode(&bytes))
     }
-    pub fn to_bytes(&self) -> Result<String, JsValue> {
-        let bytes = cbor!(&self.0).map_err(|e| JsValue::from_str(&format! {"{:?}", e}))?;
-        Ok(bytes)
-    }
 }
 
 /// This is the linear fee algorithm used buy the current cardano blockchain.
