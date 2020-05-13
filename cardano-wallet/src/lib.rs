@@ -293,6 +293,14 @@ impl Address {
             .map_err(|e| JsValue::from_str(&format! {"{:?}", e}))
             .map(Address)
     }
+
+    pub fn is_valid(s: &str) -> bool {
+        use std::str::FromStr;
+        match address::ExtendedAddr::from_str(s) {
+            Ok(v) => true,
+            Err(err) => false,
+        }
+    }
 }
 
 #[wasm_bindgen]

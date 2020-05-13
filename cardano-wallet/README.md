@@ -134,3 +134,11 @@ const signed_transaction = transaction_finalizer.finalize();
 console.log("ready to send transaction: ", signed_transaction.to_hex());
 console.log(signed_transaction.to_json());
 ```
+
+# How to build (locally)
+
+```
+wasm-pack build --target browser
+npm install
+npm run serve
+```
