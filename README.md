@@ -1,3 +1,9 @@
+# DEPRECATED
+
+These libraries are no longer compatible with Cardano since the 29th July 2020 Hardfork.
+The whole serialisation format has been redefined. Transactions are no longer the same
+either.
+
 # cardano wasm binding for JavaScript
 
 ## Installation
